@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { chatStream } from '../api/sse'
 import { errMsg, kbApi, locateApi, quizApi } from '../api/http'
+import { isDevMode } from '../api/visitor'
 import type { DocStatus, GradeItem, LocateItem, QuizQuestion } from '../api/http'
 import type { Citation, DoneMeta } from '../api/types'
 
@@ -25,6 +26,7 @@ type Message = UserMessage | AssistantMessage
 const route = useRoute()
 const router = useRouter()
 const kbId = Number(route.params.kbId)
+const devMode = ref(isDevMode())
 
 const messages = reactive<Message[]>([])
 const question = ref('')
@@ -309,7 +311,7 @@ function onKeyEnter(event: KeyboardEvent) {
             <div v-if="m.done && m.meta?.latencyMs" class="meta">
               {{ m.meta.latencyMs }}ms<template v-if="m.meta.completionTokens"> · {{ m.meta.completionTokens }} tokens</template>
               <template v-if="m.meta.error"> · {{ m.meta.error }}</template>
-              <template v-if="m.meta.queryId && m.meta.queryId > 0">
+              <template v-if="devMode && m.meta.queryId && m.meta.queryId > 0">
                 · <a class="debug-link" @click="router.push(`/debug/${kbId}?qid=${m.meta.queryId}`)">查看检索过程</a>
               </template>
             </div>

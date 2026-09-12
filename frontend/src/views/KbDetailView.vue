@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, ChatDotRound, CopyDocument, RefreshLeft } from '@element-plus/icons-vue'
 import { errMsg, kbApi } from '../api/http'
+import { isDevMode } from '../api/visitor'
 import type { ChunkPreviewResponse, PreviewBlock } from '../api/http'
 import type { DocStatus, KbInfo } from '../api/types'
 
@@ -14,6 +15,7 @@ const kbId = Number(route.params.id)
 const kb = ref<KbInfo | null>(null)
 const docs = ref<DocStatus[]>([])
 const uploading = ref(false)
+const devMode = ref(isDevMode())
 let timer: number | undefined
 
 const hasProcessing = computed(() =>
@@ -154,10 +156,10 @@ onUnmounted(() => window.clearInterval(timer))
       </div>
     </el-card>
 
-    <el-card class="upload-card">
+    <el-card v-if="devMode" class="upload-card">
       <template #header>
         <span class="dot" style="background: var(--ws-purple)" />
-        <span class="card-title">分片预览</span>
+        <span class="card-title">分片预览（开发者）</span>
         <span class="card-sub">系统把文档切成"小块"来检索——上传前先看切得合不合理，不好就换策略重切（不入库）</span>
       </template>
       <div class="preview-controls">
