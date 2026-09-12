@@ -1,0 +1,49 @@
+# 密钥与本地配置：绝对不能提交
+.env
+.env.local
+deploy/.env
+application-local.yml
+application-secret.yml
+
+# Java
+target/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+
+# Node
+node_modules/
+dist/
+.vite/
+*.log
+
+# Python（embedding 服务）
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+models/
+*.onnx
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# 运行数据
+data/
+pgdata/
+
+# 本地工具（Maven 等）
+tools/
+
+# 另一个 AI 工具的本地记忆，不入库
+.workbuddy/
+
+# 旧 repomind 项目遗留的 workflow 模板，M3 会用 wenshu 的正式版替换
+.github/workflows/deploy.yml

@@ -1,0 +1,35 @@
+spring:
+  application:
+    name: wenshu
+  datasource:
+    url: jdbc:postgresql://localhost:5432/wenshu
+    username: wenshu
+    password: wenshu123        # 仅本地开发环境
+    driver-class-name: org.postgresql.Driver
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jpa:
+    hibernate:
+      ddl-auto: validate       # 表结构只由 Flyway 建，JPA 只校验
+    open-in-view: false
+  data:
+    redis:
+      host: localhost
+      port: 16379             # 宿主机 6379 被本机 redis-server 占用，dev 容器映射在 16379
+  servlet:
+    multipart:
+      max-file-size: 50MB      # 00 号文档 §6：单文档上限 50MB
+      max-request-size: 60MB
+
+server:
+  port: 8080
+
+management:
+  endpoint:
+    health:
+      show-details: always      # 本地开发排查用，生产关闭
+  endpoints:
+    web:
+      exposure:
+        include: health,info

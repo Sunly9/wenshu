@@ -1,0 +1,26 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: wenshu-pg
+    environment:
+      POSTGRES_DB: wenshu
+      POSTGRES_USER: wenshu
+      POSTGRES_PASSWORD: wenshu123   # 仅本地开发环境
+    ports:
+      - "5432:5432"
+    volumes:
+      - wenshu_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wenshu -d wenshu"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: wenshu-redis
+    ports:
+      - "16379:6379"   # 宿主机 6379 被本机 redis-server.exe 占用，开发环境映射到 16379
+
+volumes:
+  wenshu_pgdata:

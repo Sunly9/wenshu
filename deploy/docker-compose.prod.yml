@@ -1,0 +1,89 @@
+name: repomind
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    mem_limit: 700m
+    networks: [app]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - allkeys-lru
+    volumes:
+      - redisdata:/data
+    mem_limit: 300m
+    networks: [app]
+
+  embedding:
+    image: ${IMAGE_PREFIX}/embedding:${IMAGE_TAG}
+    restart: unless-stopped
+    environment:
+      EMBEDDING_MODEL: BAAI/bge-small-zh-v1.5
+      EMBEDDING_DIM: "512"
+      OMP_NUM_THREADS: "2"
+    mem_limit: 700m
+    networks: [app]
+
+  backend:
+    image: ${IMAGE_PREFIX}/backend:${IMAGE_TAG}
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
+      EMBEDDING_BASE_URL: http://embedding:8000
+      LLM_BASE_URL: ${LLM_BASE_URL}
+      LLM_MODEL: ${LLM_MODEL}
+      LLM_API_KEY: ${LLM_API_KEY}
+      APP_RATE_LIMIT_PER_IP: ${APP_RATE_LIMIT_PER_IP}
+      JAVA_TOOL_OPTIONS: -Xms256m -Xmx640m -XX:+UseSerialGC
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    mem_limit: 900m
+    networks: [app]
+
+  web:
+    image: ${IMAGE_PREFIX}/web:${IMAGE_TAG}
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    depends_on:
+      - backend
+    mem_limit: 128m
+    networks: [app]
+
+volumes:
+  pgdata:
+  redisdata:
+
+networks:
+  app:
+    driver: bridge
