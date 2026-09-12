@@ -19,7 +19,7 @@ public class VectorRecall {
         this.embeddingClient = embeddingClient;
     }
 
-    public List<RetrievedChunk> recall(long kbId, String question, int topK) {
+    public List<RetrievedChunk> recall(long kbId, String question, int topK, String strategy) {
         float[] queryVector = embeddingClient.embed(List.of(question))[0];
         String vec = ChunkIndexer.toVectorLiteral(queryVector);
         return jdbc.query("""
@@ -27,9 +27,8 @@ public class VectorRecall {
                        1 - (c.embedding <=> ?::vector) AS score
                 FROM chunk c
                 JOIN document d ON d.id = c.document_id
-                JOIN knowledge_base kb ON kb.id = d.kb_id
                 WHERE d.kb_id = ? AND d.status = 'READY' AND c.embedding IS NOT NULL
-                  AND c.strategy = kb.chunk_strategy
+                  AND c.strategy = ?
                 ORDER BY c.embedding <=> ?::vector
                 LIMIT ?
                 """,
@@ -43,6 +42,6 @@ public class VectorRecall {
                         rs.getString("content"),
                         rs.getInt("token_count"),
                         rs.getDouble("score")),
-                vec, kbId, vec, topK);
+                vec, kbId, strategy, vec, topK);
     }
 }

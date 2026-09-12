@@ -106,8 +106,8 @@ export interface DebugResp {
 }
 
 export const debugApi = {
-  query: (kbId: number, question: string) =>
-    http.post<DebugResp>(`/kb/${kbId}/debug-query`, { question }).then((r) => r.data),
+  query: (kbId: number, question: string, strategy?: string) =>
+    http.post<DebugResp>(`/kb/${kbId}/debug-query`, { question, strategy }).then((r) => r.data),
   byId: (queryId: number) => http.get<DebugResp>(`/debug/${queryId}`).then((r) => r.data),
   recent: (kbId: number) =>
     http
@@ -116,4 +116,20 @@ export const debugApi = {
         { params: { limit: 15 } },
       )
       .then((r) => r.data),
+}
+
+// ---------- 查模式（原文定位） ----------
+export interface LocateItem {
+  chunkId: number
+  file: string
+  section: string | null
+  page: number | null
+  content: string
+  tokenCount: number
+  score?: number
+}
+
+export const locateApi = {
+  query: (kbId: number, query: string) =>
+    http.post<LocateItem[]>(`/kb/${kbId}/locate`, { query }).then((r) => r.data),
 }

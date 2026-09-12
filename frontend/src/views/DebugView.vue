@@ -11,6 +11,7 @@ const kbId = Number(route.params.kbId)
 const question = ref('')
 const loading = ref(false)
 const result = ref<DebugResp | null>(null)
+const strategy = ref<string>('')
 
 interface RecentRow {
   id: number
@@ -42,7 +43,7 @@ async function run() {
   if (!q || loading.value) return
   loading.value = true
   try {
-    result.value = await debugApi.query(kbId, q)
+    result.value = await debugApi.query(kbId, q, strategy.value || undefined)
     await loadRecent()
   } catch (e) {
     ElMessage.error(errMsg(e))
@@ -79,6 +80,12 @@ onMounted(async () => {
 
     <el-card class="query-card">
       <div class="query-row">
+        <el-select v-model="strategy" style="width: 190px" placeholder="分块策略">
+          <el-option label="库当前策略" value="" />
+          <el-option label="结构感知" value="STRUCTURE_AWARE" />
+          <el-option label="递归分隔符" value="RECURSIVE" />
+          <el-option label="固定长度" value="FIXED" />
+        </el-select>
         <el-input
           v-model="question"
           placeholder="输入问题，只跑检索不生成（不消耗模型 token）"

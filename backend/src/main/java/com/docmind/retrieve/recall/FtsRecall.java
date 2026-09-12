@@ -18,7 +18,7 @@ public class FtsRecall {
         this.chineseTokenizer = chineseTokenizer;
     }
 
-    public List<RetrievedChunk> recall(long kbId, String question, int topK) {
+    public List<RetrievedChunk> recall(long kbId, String question, int topK, String strategy) {
         // OR 语义召回（任一词命中即可，靠 ts_rank_cd 排序）；AND 语义在真实问题上几乎无块能全中
         String query = String.join(" | ", chineseTokenizer.segmentToList(question).stream()
                 .distinct().toList());
@@ -28,11 +28,10 @@ public class FtsRecall {
                        ts_rank_cd(c.content_tsv, q.query) AS score
                 FROM chunk c
                 JOIN document d ON d.id = c.document_id
-                JOIN knowledge_base kb ON kb.id = d.kb_id
                 CROSS JOIN to_tsquery('simple', ?) AS q(query)
                 WHERE d.kb_id = ? AND d.status = 'READY'
                   AND c.content_tsv IS NOT NULL AND c.content_tsv <> ''::tsvector
-                  AND c.strategy = kb.chunk_strategy
+                  AND c.strategy = ?
                   AND c.content_tsv @@ q.query
                 ORDER BY score DESC
                 LIMIT ?
@@ -47,6 +46,6 @@ public class FtsRecall {
                         rs.getString("content"),
                         rs.getInt("token_count"),
                         rs.getDouble("score")),
-                query, kbId, topK);
+                query, kbId, strategy, topK);
     }
 }

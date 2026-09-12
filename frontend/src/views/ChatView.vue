@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { chatStream } from '../api/sse'
+import { errMsg, locateApi } from '../api/http'
+import type { LocateItem } from '../api/http'
 import type { Citation, DoneMeta } from '../api/types'
 
 interface AssistantMessage {
@@ -29,6 +32,11 @@ const streaming = ref(false)
 const listEl = ref<HTMLElement>()
 const dialogSnippet = ref<Citation | null>(null)
 
+// 查模式（原文定位）
+const mode = ref<'ask' | 'locate'>('ask')
+const locateResults = ref<LocateItem[]>([])
+const locating = ref(false)
+
 const canSend = computed(() => question.value.trim().length > 0 && !streaming.value)
 
 /** [n] 角标转可点击上标（先转义 HTML 保证安全） */
@@ -52,6 +60,22 @@ function onCitationClick(event: MouseEvent) {
 async function send() {
   const q = question.value.trim()
   if (!q || streaming.value) return
+
+  if (mode.value === 'locate') {
+    locating.value = true
+    locateResults.value = []
+    try {
+      locateResults.value = await locateApi.query(kbId, q)
+      if (locateResults.value.length === 0) {
+        ElMessage.info('没有找到相关段落，换个说法试试')
+      }
+    } catch (e) {
+      ElMessage.error(errMsg(e))
+    } finally {
+      locating.value = false
+    }
+    return
+  }
 
   messages.push({ role: 'user', text: q })
   question.value = ''
@@ -102,6 +126,44 @@ function onKeyEnter(event: KeyboardEvent) {
 
 <template>
   <div class="chat-page">
+    <div class="mode-bar">
+      <el-radio-group v-model="mode" size="small">
+        <el-radio-button value="ask">问（AI 回答，带出处）</el-radio-button>
+        <el-radio-button value="locate">查（只找原文段落）</el-radio-button>
+      </el-radio-group>
+    </div>
+
+    <!-- 查模式：段落卡片列表 -->
+    <div v-if="mode === 'locate'" class="locate-wrap">
+      <div ref="listEl" class="locate-list">
+        <el-empty v-if="locateResults.length === 0 && !locating" description="丢一段话、一个术语、甚至半句记不全的话——直接定位到原文" />
+        <el-card v-for="item in locateResults" :key="item.chunkId" class="locate-card" shadow="never">
+          <div class="locate-src">
+            {{ item.file }}<template v-if="item.page"> · 第{{ item.page }}页</template>
+            <template v-if="item.section"> · {{ item.section }}</template>
+            <span v-if="item.score" class="locate-score">相关度 {{ item.score }}</span>
+          </div>
+          <div class="locate-content">{{ item.content }}</div>
+        </el-card>
+      </div>
+      <div class="input-bar">
+        <el-input
+          v-model="question"
+          type="textarea"
+          :rows="2"
+          maxlength="500"
+          placeholder="输入要找的内容（Enter 搜索）"
+          :disabled="locating"
+          @keydown="onKeyEnter"
+        />
+        <el-button type="primary" :disabled="!canSend" :loading="locating" @click="send">
+          搜索
+        </el-button>
+      </div>
+    </div>
+
+    <!-- 问模式：对话 -->
+    <template v-else>
     <div ref="listEl" class="msg-list" @click="onCitationClick">
       <el-empty
         v-if="messages.length === 0"
@@ -153,6 +215,7 @@ function onKeyEnter(event: KeyboardEvent) {
         发送
       </el-button>
     </div>
+    </template>
 
     <el-dialog v-model="dialogSnippet" :title="dialogSnippet ? `[${dialogSnippet.n}] 原文片段` : ''" width="560px">
       <template v-if="dialogSnippet">
@@ -175,6 +238,38 @@ function onKeyEnter(event: KeyboardEvent) {
   background: #fff;
   border: 1px solid var(--ws-border);
   border-radius: 10px;
+}
+.mode-bar {
+  padding: 8px 12px 0;
+}
+.locate-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.locate-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+}
+.locate-card {
+  margin-bottom: 10px;
+}
+.locate-src {
+  font-size: 12px;
+  color: var(--ws-text-light);
+  margin-bottom: 6px;
+}
+.locate-score {
+  float: right;
+  color: var(--ws-primary);
+}
+.locate-content {
+  font-size: 13px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .msg-list {
   flex: 1;

@@ -33,17 +33,21 @@ public class DebugService {
         this.queryLogService = queryLogService;
     }
 
-    /** 即时检索：跑完整检索链但不生成，结果落 query_log 供回看 */
-    public DebugResponse debugQuery(long kbId, String question, String visitorId) {
+    /** 即时检索：跑完整检索链但不生成，结果落 query_log 供回看；strategy 可指定对比 */
+    public DebugResponse debugQuery(long kbId, String question, String visitorId, String strategy) {
         kbService.requireAccessible(kbId, visitorId);
         long start = System.currentTimeMillis();
-        RetrievalService.RetrievalResult retrieval = retrievalService.recall(kbId, question);
+        RetrievalService.RetrievalResult retrieval = retrievalService.recall(kbId, question, strategy);
         List<RetrievedChunk> context = assembler.assembleContext(retrieval.reranked());
         long latency = System.currentTimeMillis() - start;
+        Map<String, Object> meta = retrievalService.meta(retrieval);
+        if (strategy != null) {
+            meta.put("strategy", strategy);
+        }
         long queryId = queryLogService.save(kbId, visitorId, question,
                 retrievalService.candidatesDetail(retrieval),
                 context.stream().map(RetrievedChunk::chunkId).toList(),
-                null, latency, null, null, retrievalService.meta(retrieval));
+                null, latency, null, null, meta);
         return byQueryId(queryId, visitorId);
     }
 

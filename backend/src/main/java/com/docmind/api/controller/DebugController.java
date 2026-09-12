@@ -21,12 +21,14 @@ import java.util.Map;
 public class DebugController {
 
     private final DebugService debugService;
+    private final com.docmind.service.LocateService locateService;
 
-    public DebugController(DebugService debugService) {
+    public DebugController(DebugService debugService, com.docmind.service.LocateService locateService) {
         this.debugService = debugService;
+        this.locateService = locateService;
     }
 
-    /** 即时执行检索链（不进 LLM），返回完整打分画像 */
+    /** 即时执行检索链（不进 LLM），返回完整打分画像；strategy 可选（默认库策略） */
     @PostMapping("/api/kb/{kbId}/debug-query")
     public DebugResponse debugQuery(@PathVariable Long kbId,
                                     @RequestHeader("X-Visitor-Id")
@@ -37,7 +39,20 @@ public class DebugController {
         if (question.isEmpty()) {
             throw new com.docmind.common.exception.ApiException("问题不能为空");
         }
-        return debugService.debugQuery(kbId, question, visitorId);
+        String strategy = body.get("strategy");
+        if (strategy != null && strategy.isBlank()) strategy = null;
+        return debugService.debugQuery(kbId, question, visitorId, strategy);
+    }
+
+    /** 查模式（原文定位）：丢半句话/关键词，返回排序段落（不进 LLM） */
+    @PostMapping("/api/kb/{kbId}/locate")
+    public java.util.List<java.util.Map<String, Object>> locate(
+            @PathVariable Long kbId,
+            @RequestHeader("X-Visitor-Id")
+            @NotBlank(message = "缺少访客标识")
+            @Size(max = 64) String visitorId,
+            @RequestBody Map<String, String> body) {
+        return locateService.locate(kbId, body.get("query"), visitorId);
     }
 
     /** 读取历史查询的检索画像（00 号文档 §7 冻结接口） */

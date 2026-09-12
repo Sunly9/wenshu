@@ -31,22 +31,33 @@ public class RetrievalService {
     private final FtsRecall ftsRecall;
     private final RrfFusion rrfFusion;
     private final com.docmind.retrieve.rerank.RerankClient rerankClient;
+    private final com.docmind.domain.repo.KnowledgeBaseRepository kbRepo;
 
     public RetrievalService(VectorRecall vectorRecall, FtsRecall ftsRecall, RrfFusion rrfFusion,
-                            com.docmind.retrieve.rerank.RerankClient rerankClient) {
+                            com.docmind.retrieve.rerank.RerankClient rerankClient,
+                            com.docmind.domain.repo.KnowledgeBaseRepository kbRepo) {
         this.vectorRecall = vectorRecall;
         this.ftsRecall = ftsRecall;
         this.rrfFusion = rrfFusion;
         this.rerankClient = rerankClient;
+        this.kbRepo = kbRepo;
     }
 
     public RetrievalResult recall(long kbId, String question) {
+        return recall(kbId, question, null);
+    }
+
+    /** @param strategyOverride 指定分块策略（调试台对比/消融实验用）；null = 用知识库当前策略 */
+    public RetrievalResult recall(long kbId, String question, String strategyOverride) {
+        String strategy = strategyOverride != null ? strategyOverride
+                : kbRepo.findById(kbId).map(com.docmind.domain.KnowledgeBase::getChunkStrategy)
+                        .orElse("STRUCTURE_AWARE");
         long t0 = System.currentTimeMillis();
-        List<RetrievedChunk> byVector = vectorRecall.recall(kbId, question, RECALL_TOP_K);
+        List<RetrievedChunk> byVector = vectorRecall.recall(kbId, question, RECALL_TOP_K, strategy);
         long vectorMs = System.currentTimeMillis() - t0;
 
         long t1 = System.currentTimeMillis();
-        List<RetrievedChunk> byFts = ftsRecall.recall(kbId, question, RECALL_TOP_K);
+        List<RetrievedChunk> byFts = ftsRecall.recall(kbId, question, RECALL_TOP_K, strategy);
         long ftsMs = System.currentTimeMillis() - t1;
 
         long t2 = System.currentTimeMillis();
