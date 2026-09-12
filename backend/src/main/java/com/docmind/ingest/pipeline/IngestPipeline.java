@@ -2,15 +2,20 @@ package com.docmind.ingest.pipeline;
 
 import com.docmind.domain.Document;
 import com.docmind.domain.repo.DocumentRepository;
+import com.docmind.ingest.parser.DocumentParser;
+import com.docmind.ingest.parser.ParsedDocument;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
+import java.nio.file.Path;
+import java.util.List;
+
 /**
  * 离线链路编排：PENDING → PARSING → INDEXING → READY / FAILED（03 号文档 §4.1）
- * D2 为状态机空跑版：解析器尚未接入，走到 PARSING 后以明确的错误信息落 FAILED。
- * D3/D4 将把解析与分片真正接进来。
+ * D3：解析器已接入（pdf / md），解析结果记录页数；分片与向量化 D4 接入。
  */
 @Component
 public class IngestPipeline {
@@ -19,10 +24,17 @@ public class IngestPipeline {
 
     private final DocumentRepository documentRepo;
     private final IngestProgressStore progress;
+    private final List<DocumentParser> parsers;
+    private final Path storageDir;
 
-    public IngestPipeline(DocumentRepository documentRepo, IngestProgressStore progress) {
+    public IngestPipeline(DocumentRepository documentRepo,
+                          IngestProgressStore progress,
+                          List<DocumentParser> parsers,
+                          @Value("${wenshu.storage-dir}") String storageDir) {
         this.documentRepo = documentRepo;
         this.progress = progress;
+        this.parsers = parsers;
+        this.storageDir = Path.of(storageDir).toAbsolutePath().normalize();
     }
 
     @Async("ingestExecutor")
@@ -37,10 +49,28 @@ public class IngestPipeline {
         progress.update(documentId, 10);
 
         try {
-            // TODO(D3): 按 fileType 调用 PdfParser / MarkdownParser
-            // TODO(D4): 分片 → 向量化 → 批量入库（INDEXING 阶段）
-            throw new UnsupportedOperationException(
-                    "[" + doc.getFileType() + "] 解析器尚未接入（D3 实现），文档已标记为失败，届时请删除后重新上传");
+            DocumentParser parser = parsers.stream()
+                    .filter(p -> p.supports(doc.getFileType()))
+                    .findFirst()
+                    .orElseThrow(() -> new UnsupportedOperationException(
+                            "[" + doc.getFileType() + "] 解析器尚未接入（当前支持 pdf / md，docx 计划 D8）"));
+
+            Path stored = storageDir.resolve("kb-" + doc.getKbId())
+                    .resolve(doc.getId() + "." + doc.getFileType());
+            ParsedDocument parsed = parser.parse(stored);
+            doc.setPageCount(parsed.pageCount());
+            documentRepo.save(doc);
+            progress.update(documentId, 40);
+            log.info("文档 {} 解析完成：{} 页，元素 {} 个（标题 {}，段落 {}，表格 {}，列表 {}）",
+                    documentId, parsed.pageCount(), parsed.elements().size(),
+                    parsed.countByType(com.docmind.ingest.parser.ParsedElement.ElementType.HEADING),
+                    parsed.countByType(com.docmind.ingest.parser.ParsedElement.ElementType.PARAGRAPH),
+                    parsed.countByType(com.docmind.ingest.parser.ParsedElement.ElementType.TABLE),
+                    parsed.countByType(com.docmind.ingest.parser.ParsedElement.ElementType.LIST));
+
+            // TODO(D4): 分片（父子分块）→ 向量化 → 全文索引 → 批量入库（INDEXING 阶段）
+            throw new UnsupportedOperationException("解析成功（" + parsed.pageCount() + " 页 / "
+                    + parsed.elements().size() + " 个元素），分片与向量化在 D4 接入，届时请删除后重新上传");
         } catch (Exception e) {
             doc.setStatus(Document.Status.FAILED);
             doc.setErrorMsg(e.getMessage());
