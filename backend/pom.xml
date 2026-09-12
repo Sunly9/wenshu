@@ -80,6 +80,12 @@
       <artifactId>flexmark-ext-tables</artifactId>
       <version>0.64.8</version>
     </dependency>
+    <!-- Word(.docx) 解析 -->
+    <dependency>
+      <groupId>org.apache.poi</groupId>
+      <artifactId>poi-ooxml</artifactId>
+      <version>5.3.0</version>
+    </dependency>
 
     <!-- 本地推理：ONNX Runtime(CPU)。分词器为纯 Java 自研 WordPiece（见 index/BertTokenizer） -->
     <dependency>

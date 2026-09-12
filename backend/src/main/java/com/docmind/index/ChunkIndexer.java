@@ -1,12 +1,18 @@
 package com.docmind.index;
 
 import com.docmind.ingest.chunker.ChunkDraft;
+import com.docmind.ingest.chunker.ChunkResult;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Component;
 
+import java.sql.PreparedStatement;
+import java.sql.Types;
+import java.util.ArrayList;
 import java.util.List;
 
-/** chunk 批量入库（pgvector 向量以字符串字面量 ?::vector 写入；父块/全文索引 D8/D10 接入） */
+/** chunk 入库：父块（无向量，返回给模型）逐条插入取回 id，子块（带向量，参与检索）批量插入 */
 @Component
 public class ChunkIndexer {
 
@@ -20,19 +26,49 @@ public class ChunkIndexer {
         jdbc.update("DELETE FROM chunk WHERE document_id = ?", documentId);
     }
 
-    public void insertChunks(long documentId, List<ChunkDraft> chunks, float[][] vectors) {
-        if (chunks.size() != vectors.length) {
-            throw new IllegalStateException("分块数与向量数不一致：" + chunks.size() + " vs " + vectors.length);
+    public void insertChunks(long documentId, ChunkResult result, float[][] childVectors) {
+        List<ChunkDraft> parents = result.parents();
+        List<ChunkDraft> children = result.children();
+        if (children.size() != childVectors.length) {
+            throw new IllegalStateException("子块数与向量数不一致：" + children.size() + " vs " + childVectors.length);
         }
-        List<Object[]> args = new java.util.ArrayList<>(chunks.size());
-        for (int i = 0; i < chunks.size(); i++) {
-            ChunkDraft chunk = chunks.get(i);
-            args.add(new Object[]{documentId, chunk.content(), chunk.tokenCount(),
-                    chunk.sectionPath(), chunk.pageNo(), i, toVectorLiteral(vectors[i])});
+
+        // 父块：数量级为百，逐条插入取回自增 id（子块要挂 parent_id）
+        long[] parentIds = new long[parents.size()];
+        for (int i = 0; i < parents.size(); i++) {
+            final ChunkDraft parent = parents.get(i);
+            final int parentIndex = i;
+            KeyHolder keys = new GeneratedKeyHolder();
+            String sql = """
+                    INSERT INTO chunk(document_id, parent_id, content, token_count, section_path, page_no, chunk_index)
+                    VALUES (?, NULL, ?, ?, ?, ?, ?)
+                    """;
+            jdbc.update(con -> {
+                PreparedStatement ps = con.prepareStatement(sql, new String[]{"id"});
+                ps.setLong(1, documentId);
+                ps.setString(2, parent.content());
+                ps.setInt(3, parent.tokenCount());
+                ps.setString(4, parent.sectionPath());
+                if (parent.pageNo() != null) ps.setInt(5, parent.pageNo());
+                else ps.setNull(5, Types.INTEGER);
+                ps.setInt(6, parentIndex);
+                return ps;
+            }, keys);
+            parentIds[i] = keys.getKey() == null ? -1 : keys.getKey().longValue();
+        }
+
+        // 子块：批量，带向量与 parent_id
+        List<Object[]> args = new ArrayList<>(children.size());
+        for (int i = 0; i < children.size(); i++) {
+            ChunkDraft child = children.get(i);
+            Long parentId = child.parentIndex() == null ? null
+                    : (child.parentIndex() < parentIds.length ? parentIds[child.parentIndex()] : null);
+            args.add(new Object[]{documentId, parentId, child.content(), child.tokenCount(),
+                    child.sectionPath(), child.pageNo(), parents.size() + i, toVectorLiteral(childVectors[i])});
         }
         jdbc.batchUpdate("""
-                INSERT INTO chunk(document_id, content, token_count, section_path, page_no, chunk_index, embedding)
-                VALUES (?, ?, ?, ?, ?, ?, ?::vector)
+                INSERT INTO chunk(document_id, parent_id, content, token_count, section_path, page_no, chunk_index, embedding)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?::vector)
                 """, args);
     }
 

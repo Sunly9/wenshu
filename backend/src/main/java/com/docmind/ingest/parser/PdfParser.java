@@ -61,7 +61,7 @@ public class PdfParser implements DocumentParser {
         Set<Line> removed = headerFooterLines(lines, pageCount);
 
         List<Float> headingSizes = lines.stream()
-                .filter(l -> !removed.contains(l) && l.maxFont > bodySize * HEADING_RATIO)
+                .filter(l -> !removed.contains(l) && isHeading(l, bodySize))
                 .map(l -> l.maxFont).distinct().sorted(Comparator.reverseOrder())
                 .limit(4).toList();
 
@@ -71,8 +71,9 @@ public class PdfParser implements DocumentParser {
 
         for (Line line : lines) {
             if (removed.contains(line)) continue;
+            if (isTocEntry(line.text)) continue;  // 目录条目（"标题 ······ 12"）不进入正文
 
-            if (line.maxFont > bodySize * HEADING_RATIO) {
+            if (isHeading(line, bodySize)) {
                 flushParagraph(elements, paragraph, paragraphPage);
                 int idx = headingSizes.indexOf(line.maxFont);
                 // 超出前 4 种标题字号的（如封面/前言的花式排版）一律归入最深层级
@@ -94,6 +95,24 @@ public class PdfParser implements DocumentParser {
         }
         flushParagraph(elements, paragraph, paragraphPage);
         return elements;
+    }
+
+    /** 标题判定：字号显著大于正文，且不像公式/长句/目录（D8 修正：封面公式行误判为标题污染章节路径） */
+    private boolean isHeading(Line line, float bodySize) {
+        if (line.maxFont <= bodySize * HEADING_RATIO) return false;
+        String text = line.text;
+        if (text.length() > 40) return false;  // 标题不会超过 40 字
+        int meaningful = 0;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (Character.isLetterOrDigit(c) || c >= 0x4E00) meaningful++;  // 字母数字或汉字
+        }
+        return meaningful >= text.length() * 0.5;  // 符号/乱码占多数的不是标题
+    }
+
+    /** 目录条目：以点线/省略号引导、以页码结尾 */
+    private boolean isTocEntry(String text) {
+        return text.matches(".*[.·…\u2026]{2,}\\s*\\d{1,4}\\s*$") && text.length() <= 80;
     }
 
     private float bodySizeMode(List<Line> lines) {

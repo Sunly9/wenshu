@@ -6,8 +6,10 @@ import com.docmind.domain.repo.DocumentRepository;
 import com.docmind.domain.repo.KnowledgeBaseRepository;
 import com.docmind.ingest.chunker.ChunkDraft;
 import com.docmind.ingest.chunker.Chunker;
+import com.docmind.ingest.chunker.ChunkResult;
 import com.docmind.ingest.chunker.FixedSizeChunker;
 import com.docmind.ingest.chunker.RecursiveChunker;
+import com.docmind.ingest.chunker.StructureAwareChunker;
 import com.docmind.ingest.parser.DocumentParser;
 import com.docmind.ingest.parser.ParsedDocument;
 import com.docmind.index.ChunkIndexer;
@@ -102,38 +104,43 @@ public class IngestPipeline {
         return parsed;
     }
 
-    /** INDEXING：分片 → 向量化 → 批量入库；@return 块数 */
+    /** INDEXING：分片 → 子块向量化 → 批量入库；@return 子块数 */
     private int indexingStage(Document doc, ParsedDocument parsed) {
         doc.setStatus(Document.Status.INDEXING);
         documentRepo.save(doc);
         progress.update(doc.getId(), 50);
 
         Chunker chunker = chunkerFor(doc.getKbId());
-        List<ChunkDraft> drafts = chunker.chunk(parsed);
-        if (drafts.isEmpty()) {
+        ChunkResult result = chunker.chunk(parsed);
+        if (result.children().isEmpty()) {
             throw new IllegalStateException("解析成功但未产生任何分块（文档可能是空的或全是图片）");
         }
         progress.update(doc.getId(), 60);
 
-        float[][] vectors = embeddingClient.embed(drafts.stream().map(ChunkDraft::content).toList());
+        // 只向量化子块：父块不参与检索（无向量），由 assembler 在 D11 合并返回
+        float[][] vectors = embeddingClient.embed(
+                result.children().stream().map(ChunkDraft::content).toList());
         progress.update(doc.getId(), 90);
 
         chunkIndexer.deleteByDocument(doc.getId());
-        chunkIndexer.insertChunks(doc.getId(), drafts, vectors);
+        chunkIndexer.insertChunks(doc.getId(), result, vectors);
 
-        doc.setTokenCount(drafts.stream().mapToInt(ChunkDraft::tokenCount).sum());
+        doc.setTokenCount(result.children().stream().mapToInt(ChunkDraft::tokenCount).sum());
         documentRepo.save(doc);
-        log.info("文档 {} 入库完成：{} 块 / {} token / 策略 {}",
-                doc.getId(), drafts.size(), doc.getTokenCount(), chunker.getClass().getSimpleName());
-        return drafts.size();
+        log.info("文档 {} 入库完成：父块 {} / 子块 {} / {} token / 策略 {}",
+                doc.getId(), result.parents().size(), result.children().size(), doc.getTokenCount(),
+                chunker.getClass().getSimpleName());
+        return result.children().size();
     }
 
     private Chunker chunkerFor(Long kbId) {
-        String strategy = kbRepo.findById(kbId).map(KnowledgeBase::getChunkStrategy).orElse("RECURSIVE");
+        String strategy = kbRepo.findById(kbId).map(KnowledgeBase::getChunkStrategy).orElse("STRUCTURE_AWARE");
         return switch (strategy) {
             case "FIXED" -> chunkers.stream().filter(c -> c instanceof FixedSizeChunker).findFirst().orElseThrow();
-            // STRUCTURE_AWARE / SEMANTIC 计划 D8/D9 接入，暂用 RECURSIVE
-            default -> chunkers.stream().filter(c -> c instanceof RecursiveChunker).findFirst().orElseThrow();
+            case "RECURSIVE" -> chunkers.stream().filter(c -> c instanceof RecursiveChunker).findFirst().orElseThrow();
+            // SEMANTIC 计划 D9 接入，暂与默认一致
+            default -> chunkers.stream()
+                    .filter(c -> c instanceof StructureAwareChunker).findFirst().orElseThrow();
         };
     }
 }

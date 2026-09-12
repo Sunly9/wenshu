@@ -26,7 +26,7 @@ public class FixedSizeChunker implements Chunker {
     }
 
     @Override
-    public List<ChunkDraft> chunk(ParsedDocument doc) {
+    public ChunkResult chunk(ParsedDocument doc) {
         StringBuilder all = new StringBuilder();
         List<int[]> pageSpans = new ArrayList<>();  // [start, end, pageNo]
         for (ParsedElement el : doc.elements()) {
@@ -35,7 +35,7 @@ public class FixedSizeChunker implements Chunker {
             pageSpans.add(new int[]{start, all.length(), el.pageNo()});
         }
         String text = all.toString();
-        if (text.isBlank()) return List.of();
+        if (text.isBlank()) return ChunkResult.flat(List.of());
 
         int totalTokens = tokenCounter.count(text);
         double charsPerToken = totalTokens == 0 ? 1 : (double) text.length() / totalTokens;
@@ -51,7 +51,7 @@ public class FixedSizeChunker implements Chunker {
             chunks.add(new ChunkDraft(content, tokenCounter.count(content), null, pageAt(pageSpans, start)));
             if (end >= text.length()) break;
         }
-        return chunks;
+        return ChunkResult.flat(chunks);
     }
 
     private Integer pageAt(List<int[]> pageSpans, int charOffset) {
