@@ -126,6 +126,29 @@ async function runAblation() {
   }
 }
 
+const genRunning = ref(false)
+
+async function runGenerationEval() {
+  if (genRunning.value) return
+  genRunning.value = true
+  activeTab.value = 'eval'
+  const before = runsRaw.value.length
+  try {
+    await evalApi.generationRun(kbId)
+    runTimer = window.setInterval(async () => {
+      await loadRuns()
+      if (runsRaw.value.length > before) {
+        window.clearInterval(runTimer)
+        genRunning.value = false
+        ElMessage.success('生成质量评测完成')
+      }
+    }, 15000)
+  } catch (e) {
+    genRunning.value = false
+    ElMessage.error(errMsg(e))
+  }
+}
+
 onMounted(loadRuns)
 
 const evalStats = ref<EvalStats | null>(null)
@@ -367,15 +390,30 @@ async function removeEval(id: number) {
           <el-button type="primary" :loading="ablationRunning" @click="runAblation">
             一键跑消融实验（6 配置 × {{ evalStats?.total ?? 50 }} 题）
           </el-button>
-          <span v-if="ablationRunning" class="ablation-tip">跑批中…每配置约 1 分钟，结果逐条出现</span>
+          <el-button :loading="genRunning" @click="runGenerationEval">跑生成质量评测（LLM 裁判）</el-button>
+          <span v-if="ablationRunning || genRunning" class="ablation-tip">跑批中…结果逐条出现，可稍后刷新</span>
         </div>
-        <el-table :data="evalRuns" size="small" v-loading="ablationRunning">
+        <el-table :data="evalRuns" size="small" v-loading="ablationRunning || genRunning">
           <el-table-column prop="configName" label="配置" min-width="180" />
-          <el-table-column label="HitRate@5" width="110">
-            <template #default="{ row }">{{ (row.hit_rate_at5 * 100).toFixed(1) }}%</template>
+          <el-table-column label="HitRate@5" width="100">
+            <template #default="{ row }">
+              {{ row.hit_rate_at5 != null ? (row.hit_rate_at5 * 100).toFixed(1) + '%' : '—' }}
+            </template>
           </el-table-column>
-          <el-table-column label="MRR" width="90">
-            <template #default="{ row }">{{ row.mrr.toFixed(3) }}</template>
+          <el-table-column label="MRR" width="80">
+            <template #default="{ row }">
+              {{ row.mrr != null ? row.mrr.toFixed(3) : '—' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="引用准确率" width="100">
+            <template #default="{ row }">
+              {{ row.citation_accuracy != null ? (row.citation_accuracy * 100).toFixed(1) + '%' : '—' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="忠实度" width="90">
+            <template #default="{ row }">
+              {{ row.faithfulness != null ? (row.faithfulness * 100).toFixed(1) + '%' : '—' }}
+            </template>
           </el-table-column>
           <el-table-column label="事实型" width="90">
             <template #default="{ row }">

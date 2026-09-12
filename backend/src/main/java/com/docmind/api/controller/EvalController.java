@@ -22,13 +22,16 @@ public class EvalController {
 
     private final EvalQuestionService evalQuestionService;
     private final com.docmind.eval.EvalRunner evalRunner;
+    private final com.docmind.eval.GenerationEvalService generationEvalService;
     private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     public EvalController(EvalQuestionService evalQuestionService,
                           com.docmind.eval.EvalRunner evalRunner,
+                          com.docmind.eval.GenerationEvalService generationEvalService,
                           org.springframework.jdbc.core.JdbcTemplate jdbc) {
         this.evalQuestionService = evalQuestionService;
         this.evalRunner = evalRunner;
+        this.generationEvalService = generationEvalService;
         this.jdbc = jdbc;
     }
 
@@ -42,6 +45,17 @@ public class EvalController {
         evalQuestionService.stats(kbId, visitorId);  // 复用权限校验
         evalRunner.runAsync(kbId, visitorId);
         return Map.of("started", true, "configs", 6);
+    }
+
+    /** D19 生成质量评测：完整链路生成 + LLM 裁判（忠实度/引用准确率/阈值校准），异步 */
+    @PostMapping("/api/kb/{kbId}/eval/generation-run")
+    public Map<String, Object> generationRun(@PathVariable Long kbId,
+                                             @RequestHeader("X-Visitor-Id")
+                                             @NotBlank(message = "缺少访客标识")
+                                             @Size(max = 64) String visitorId) {
+        evalQuestionService.stats(kbId, visitorId);
+        generationEvalService.runAsync(kbId);
+        return Map.of("started", true);
     }
 
     /** 跑批结果列表（评测面板数据源） */
