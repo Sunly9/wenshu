@@ -72,6 +72,62 @@ onMounted(async () => {
 })
 
 // ---------- 评测集标注 ----------
+// ---------- 评测面板（消融实验） ----------
+const activeTab = ref('debug')
+const runsRaw = ref<Awaited<ReturnType<typeof evalApi.runs>>>([])
+const ablationRunning = ref(false)
+let runTimer: number | undefined
+
+const evalRuns = computed(() =>
+  runsRaw.value
+    .map((r) => {
+      let config: { name?: string } = {}
+      let detail: { byType?: Record<string, { hitRate: number }>; refusalRate?: number } = {}
+      try {
+        config = JSON.parse(r.config)
+      } catch {
+        /* ignore */
+      }
+      try {
+        detail = JSON.parse(r.detail)
+      } catch {
+        /* ignore */
+      }
+      return { ...r, configName: config.name ?? '?', detail }
+    })
+    .sort((a, b) => (a.configName > b.configName ? 1 : -1)),
+)
+
+async function loadRuns() {
+  try {
+    runsRaw.value = await evalApi.runs(kbId)
+  } catch {
+    /* 静默 */
+  }
+}
+
+async function runAblation() {
+  if (ablationRunning.value) return
+  ablationRunning.value = true
+  activeTab.value = 'eval'
+  try {
+    await evalApi.run(kbId)
+    runTimer = window.setInterval(async () => {
+      await loadRuns()
+      if (runsRaw.value.length >= 6) {
+        window.clearInterval(runTimer)
+        ablationRunning.value = false
+        ElMessage.success('消融跑批完成（6 配置）')
+      }
+    }, 8000)
+  } catch (e) {
+    ablationRunning.value = false
+    ElMessage.error(errMsg(e))
+  }
+}
+
+onMounted(loadRuns)
+
 const evalStats = ref<EvalStats | null>(null)
 const evalRows = ref<EvalRow[]>([])
 const evalDialog = ref(false)
@@ -142,6 +198,8 @@ async function removeEval(id: number) {
       <span class="sub">每个答案背后的召回、打分与筛选全过程</span>
     </div>
 
+    <el-tabs v-model="activeTab">
+      <el-tab-pane label="检索调试" name="debug">
     <el-card class="query-card">
       <div class="query-row">
         <el-select v-model="strategy" style="width: 190px" placeholder="分块策略">
@@ -302,6 +360,47 @@ async function removeEval(id: number) {
         </el-table-column>
       </el-table>
     </el-card>
+      </el-tab-pane>
+
+      <el-tab-pane label="评测面板（消融实验）" name="eval">
+        <div class="ablation-head">
+          <el-button type="primary" :loading="ablationRunning" @click="runAblation">
+            一键跑消融实验（6 配置 × {{ evalStats?.total ?? 50 }} 题）
+          </el-button>
+          <span v-if="ablationRunning" class="ablation-tip">跑批中…每配置约 1 分钟，结果逐条出现</span>
+        </div>
+        <el-table :data="evalRuns" size="small" v-loading="ablationRunning">
+          <el-table-column prop="configName" label="配置" min-width="180" />
+          <el-table-column label="HitRate@5" width="110">
+            <template #default="{ row }">{{ (row.hit_rate_at5 * 100).toFixed(1) }}%</template>
+          </el-table-column>
+          <el-table-column label="MRR" width="90">
+            <template #default="{ row }">{{ row.mrr.toFixed(3) }}</template>
+          </el-table-column>
+          <el-table-column label="事实型" width="90">
+            <template #default="{ row }">
+              {{ row.detail.byType?.FACT ? (row.detail.byType.FACT.hitRate * 100).toFixed(0) + '%' : '—' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="多跳型" width="90">
+            <template #default="{ row }">
+              {{ row.detail.byType?.MULTI_HOP ? (row.detail.byType.MULTI_HOP.hitRate * 100).toFixed(0) + '%' : '—' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="表格型" width="90">
+            <template #default="{ row }">
+              {{ row.detail.byType?.TABLE ? (row.detail.byType.TABLE.hitRate * 100).toFixed(0) + '%' : '—' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="正确拒答率" width="100">
+            <template #default="{ row }">
+              {{ row.detail.refusalRate != null ? (row.detail.refusalRate * 100).toFixed(0) + '%' : '—' }}
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-empty v-if="evalRuns.length === 0 && !ablationRunning" description="标注完成后一键跑批，产出消融对比表" />
+      </el-tab-pane>
+    </el-tabs>
 
     <!-- 存为评测题对话框 -->
     <el-dialog v-model="evalDialog" title="存为评测题" width="560px">
@@ -472,6 +571,16 @@ export default { name: 'DebugView' }
 .ans-card .answer {
   white-space: pre-wrap;
   line-height: 1.8;
+}
+.ablation-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.ablation-tip {
+  font-size: 12px;
+  color: var(--ws-text-light);
 }
 .save-eval-btn {
   float: right;

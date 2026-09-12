@@ -19,9 +19,12 @@ public class FtsRecall {
     }
 
     public List<RetrievedChunk> recall(long kbId, String question, int topK, String strategy) {
-        // OR 语义召回（任一词命中即可，靠 ts_rank_cd 排序）；AND 语义在真实问题上几乎无块能全中
+        // OR 语义召回（任一词命中即可，靠 ts_rank_cd 排序）；
+        // 过滤纯符号 token：jieba 会切出 ( ) ？ 等，而 to_tsquery 把它们当语法字符直接报错
         String query = String.join(" | ", chineseTokenizer.segmentToList(question).stream()
-                .distinct().toList());
+                .distinct()
+                .filter(t -> t.chars().anyMatch(c -> Character.isLetterOrDigit(c) || c >= 0x4E00))
+                .toList());
         if (query.isBlank()) return List.of();
         return jdbc.query("""
                 SELECT c.id, c.document_id, c.parent_id, d.file_name, c.section_path, c.page_no, c.content, c.token_count,

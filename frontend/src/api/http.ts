@@ -191,4 +191,11 @@ export const evalApi = {
   stats: (kbId: number) => http.get<EvalStats>(`/kb/${kbId}/eval/stats`).then((r) => r.data),
   remove: (kbId: number, id: number) =>
     http.delete<EvalStats>(`/kb/${kbId}/eval/questions/${id}`).then((r) => r.data),
+  run: (kbId: number) => http.post<{ started: boolean }>('/eval/run', { kbId }).then((r) => r.data),
+  runs: (kbId: number) =>
+    http
+      .get<
+        { id: number; config: string; hit_rate_at5: number; mrr: number; detail: string; created_at: string }[]
+      >(`/kb/${kbId}/eval/runs`)
+      .then((r) => r.data),
 }

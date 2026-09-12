@@ -12,7 +12,7 @@ import java.util.Map;
 @Component
 public class RrfFusion {
 
-    static final int K = 60;
+    public static final int K = 60;
 
     public List<FusedChunk> fuse(List<RetrievedChunk> byVector, List<RetrievedChunk> byFts, int limit) {
         Map<Long, Builder> builders = new HashMap<>();

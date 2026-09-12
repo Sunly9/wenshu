@@ -95,8 +95,8 @@ public class DebugService {
 
     private List<Long> parseIds(Object value) {
         if (value == null) return List.of();
-        String s = value.toString();  // PG 数组字面量 {1,2}
-        s = s.replaceAll("[{}\\s]", "");
+        String s = value.toString();  // PG 数组字面量 {1,2}，部分驱动版本带引号
+        s = s.replaceAll("[{}\\s\"]", "");
         if (s.isBlank()) return List.of();
         return java.util.Arrays.stream(s.split(",")).map(Long::valueOf).toList();
     }
