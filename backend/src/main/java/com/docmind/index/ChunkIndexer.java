@@ -36,8 +36,8 @@ public class ChunkIndexer {
                 """, args);
     }
 
-    /** float[] → "[0.12,0.34,...]"，pgvector 接受该字面量 */
-    static String toVectorLiteral(float[] vector) {
+    /** float[] → "[0.12,0.34,...]"，pgvector 接受该字面量（召回侧构造查询向量复用） */
+    public static String toVectorLiteral(float[] vector) {
         StringBuilder sb = new StringBuilder(vector.length * 9).append('[');
         for (int i = 0; i < vector.length; i++) {
             if (i > 0) sb.append(',');

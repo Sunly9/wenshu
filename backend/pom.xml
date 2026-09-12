@@ -42,6 +42,11 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-validation</artifactId>
     </dependency>
+    <!-- WebClient：DeepSeek 流式调用（MVC 应用里只用作 HTTP 客户端） -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-webflux</artifactId>
+    </dependency>
 
     <!-- schema 由 Flyway 管理，JPA 只做 ddl-auto: validate -->
     <dependency>
