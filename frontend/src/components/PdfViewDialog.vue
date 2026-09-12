@@ -4,8 +4,16 @@ import * as pdfjsLib from 'pdfjs-dist'
 import PdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?worker'
 import { getVisitorId } from '../api/visitor'
 
-// Vite 官方姿势：?worker 直接构造 Worker 实例，避免 workerSrc 路径在 dev/prod 不一致
 pdfjsLib.GlobalWorkerOptions.workerPort = new PdfWorker()
+
+interface TextItem {
+  str: string
+  x: number
+  y: number
+  w: number
+  h: number
+  highlighted: boolean
+}
 
 const props = defineProps<{
   visible: boolean
@@ -20,9 +28,12 @@ const emit = defineEmits<{ (e: 'update:visible', v: boolean): void }>()
 const loading = ref(false)
 const pageNum = ref(1)
 const pageCount = ref(0)
-const canvasEl = ref<HTMLCanvasElement>()
-const highlightEl = ref<HTMLDivElement>()
-const status = ref('idle')  // 调试用：idle/loading/ok/错误信息
+const items = ref<TextItem[]>([])
+const pageScale = ref(1)
+const pageHeight = ref(1000)
+const status = ref('idle')
+const highlightTop = ref(0)
+const pageEl = ref<HTMLDivElement>()
 
 let pdfDoc: pdfjsLib.PDFDocumentProxy | null = null
 
@@ -31,18 +42,14 @@ watch(
   async ([visible, docId]) => {
     if (!visible || !docId) return
     loading.value = true
-    status.value = 'loading doc ' + docId
+    status.value = '加载资料…'
     try {
-      highlightEl.value?.style.setProperty('display', 'none')
-      // pdfjs 运行时有 destroy，类型定义版本不一致，这里安全调用
       const doc = pdfDoc as unknown as { destroy?: () => Promise<void> }
       await doc?.destroy?.()
-      status.value = 'getDocument…'
       pdfDoc = await pdfjsLib.getDocument({
         url: `/api/documents/${docId}/file`,
         httpHeaders: { 'X-Visitor-Id': getVisitorId() },
       }).promise
-      status.value = 'pages:' + pdfDoc.numPages
       pageCount.value = pdfDoc.numPages
       pageNum.value = Math.min(Math.max(props.page ?? 1, 1), pdfDoc.numPages)
       await renderPage()
@@ -73,52 +80,53 @@ async function go(delta: number) {
 }
 
 async function renderPage() {
-  if (!pdfDoc || !canvasEl.value) return
+  if (!pdfDoc) return
   const page = await pdfDoc.getPage(pageNum.value)
-  const width = 760
-  const viewport = page.getViewport({ scale: width / page.getViewport({ scale: 1 }).width })
-  const canvas = canvasEl.value
-  canvas.width = viewport.width
-  canvas.height = viewport.height
-  const context = canvas.getContext('2d')
-  context?.clearRect(0, 0, canvas.width, canvas.height)
-  // 渲染放后台：某些版本 render().promise 不 resolve 但绘制已完成，不阻塞高亮逻辑
-  type RenderArgs = Parameters<pdfjsLib.PDFPageProxy['render']>[0]
-  void page.render({ canvasContext: context, viewport } as unknown as RenderArgs).promise.catch(() => undefined)
+  const base = page.getViewport({ scale: 1 })
+  const scale = 760 / base.width
+  pageScale.value = scale
+  pageHeight.value = base.height * scale
 
-  await applyHighlight(page, viewport)
-}
-
-async function applyHighlight(
-  page: pdfjsLib.PDFPageProxy,
-  viewport: ReturnType<pdfjsLib.PDFPageProxy['getViewport']>,
-) {
-  if (!props.snippet || !highlightEl.value) return
-  const key = props.snippet.replace(/\s+/g, '').slice(0, 14)
-  if (!key) return
   const content = await page.getTextContent()
+  const key = props.snippet.replace(/\s+/g, '').slice(0, 14)
+  const list: TextItem[] = []
   let acc = ''
-  for (const item of content.items as Array<{ str: string; transform: number[]; width: number; height: number }>) {
-    acc += item.str.replace(/\s+/g, '')
-    if (acc.length >= key.length && acc.includes(key)) {
-      const startItem = item
-      const tx = startItem.transform[4]
-      const ty = startItem.transform[5]
-      const base = page.getViewport({ scale: 1 })
-      const scale = viewport.scale
-      const x = tx * scale
-      const y = (base.height - ty) * scale
-      const h = Math.max(startItem.height * scale, 14)
-      const box = highlightEl.value!
-      box.style.display = 'block'
-      box.style.left = Math.max(x - 4, 0) + 'px'
-      box.style.top = Math.max(y - h + 2, 0) + 'px'
-      box.style.width = Math.min(startItem.width * scale + 40, 560) + 'px'
-      box.style.height = h + 'px'
-      box.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      return
+  let matched = false
+  for (const raw of content.items as Array<{ str: string; transform: number[]; width: number; height: number }>) {
+    if (!raw.str || !raw.str.trim()) continue
+    acc += raw.str.replace(/\s+/g, '')
+    const hitNow = !matched && key && acc.length >= key.length && acc.includes(key)
+    if (hitNow) matched = true
+    const x = raw.transform[4] * scale
+    const y = (base.height - raw.transform[5]) * scale
+    const h = Math.max(raw.height * scale, 11)
+    list.push({
+      str: raw.str,
+      x,
+      y: y - h + scale * 3,
+      w: raw.width * scale,
+      h,
+      highlighted: hitNow || undefined as never,
+    })
+    if (hitNow) highlightTop.value = y
+  }
+  // 命中项可能横跨多个 item：把从命中起点累计覆盖 key 长度的都标上
+  if (key && matched) {
+    let seen = 0
+    let marking = false
+    for (const item of list) {
+      if (!marking && (item as TextItem & { highlighted?: boolean }).highlighted) marking = true
+      if (marking) {
+        (item as TextItem & { highlighted?: boolean }).highlighted = true
+        seen += item.str.replace(/\s+/g, '').length
+        if (seen >= key.length + 4) break
+      }
     }
   }
+  items.value = list
+  setTimeout(() => {
+    pageEl.value?.querySelector('.hl')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, 100)
 }
 </script>
 
@@ -130,19 +138,25 @@ async function applyHighlight(
     @update:model-value="emit('update:visible', $event)"
   >
     <div class="pdf-explain">
-      这是资料的<b>原始 PDF 页面</b>，🟡 黄色高亮处就是这条答案依据在书里的位置——答案不是编的，出处在这里。
+      这是该页资料的<b>原文文字</b>（按原版式还原），🟡 黄色高亮处就是这条答案依据的位置——答案不是编的，出处在这里。
     </div>
     <div v-loading="loading" class="pdf-wrap" :data-status="status">
       <div class="pdf-toolbar">
-        <span v-if="status.startsWith('error')" class="status-tag">{{ status }}</span>
         <el-button size="small" :disabled="pageNum <= 1" @click="go(-1)">上一页</el-button>
         <span>第 {{ pageNum }} / {{ pageCount }} 页</span>
         <el-button size="small" :disabled="pageNum >= pageCount" @click="go(1)">下一页</el-button>
-        <span v-if="snippet" class="hint">🟡 高亮段落为本条答案依据</span>
+        <span v-if="status.startsWith('error')" class="status-tag">{{ status }}</span>
       </div>
-      <div class="pdf-canvas-wrap">
-        <canvas ref="canvasEl" />
-        <div ref="highlightEl" class="pdf-highlight" />
+      <div class="text-page-wrap">
+        <div ref="pageEl" class="text-page" :style="{ height: pageHeight + 'px' }">
+          <span
+            v-for="(it, i) in items"
+            :key="i"
+            class="ti"
+            :class="{ hl: (it as any).highlighted }"
+            :style="{ left: it.x + 'px', top: it.y + 'px', fontSize: it.h + 'px', lineHeight: it.h + 'px' }"
+          >{{ it.str }}</span>
+        </div>
       </div>
     </div>
   </el-dialog>
@@ -171,34 +185,31 @@ async function applyHighlight(
   color: var(--ws-ink-light);
 }
 .status-tag {
+  color: #f56c6c;
   font-size: 11px;
-  color: var(--ws-purple);
-  max-width: 300px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
-.hint {
-  margin-left: auto;
-  font-size: 12px;
-}
-.pdf-canvas-wrap {
-  position: relative;
-  overflow: auto;
+.text-page-wrap {
+  overflow-y: auto;
   max-height: 64vh;
   border: 1px solid var(--ws-border);
   border-radius: 8px;
-  background: #525659;
+  background: #fffdf7;
 }
-.pdf-canvas-wrap canvas {
-  display: block;
+.text-page {
+  position: relative;
+  width: 760px;
+  margin: 0 auto;
+  font-family: 'SimSun', 'Songti SC', serif;
+  color: #2b2b2b;
 }
-.pdf-highlight {
-  display: none;
+.ti {
   position: absolute;
-  background: rgba(255, 213, 79, 0.45);
-  border: 1.5px solid #f0b429;
-  border-radius: 4px;
-  pointer-events: none;
+  white-space: pre;
+  transform-origin: left top;
+}
+.ti.hl {
+  background: rgba(255, 213, 79, 0.55);
+  border-radius: 3px;
+  outline: 1px solid #f0b429;
 }
 </style>
