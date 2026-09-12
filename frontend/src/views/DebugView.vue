@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { debugApi, errMsg, evalApi } from '../api/http'
+import { debugApi, errMsg, evalApi, shortSection } from '../api/http'
 import type { DebugCandidate, DebugResp, EvalRow, EvalStats, EvalType } from '../api/http'
 
 const route = useRoute()
@@ -322,7 +322,7 @@ async function removeEval(id: number) {
               <div class="snippet">{{ row.snippet }}</div>
               <div class="src">
                 {{ row.file }}<template v-if="row.page"> · P{{ row.page }}</template>
-                <template v-if="row.section"> · {{ row.section }}</template>
+                <template v-if="row.section"> · {{ shortSection(row.section) }}</template>
               </div>
             </template>
           </el-table-column>

@@ -136,6 +136,13 @@ export const locateApi = {
     http.post<LocateItem[]>(`/kb/${kbId}/locate`, { query }).then((r) => r.data),
 }
 
+/** 章节路径只展示最内层（"第9章 > 9.3 哈希表" → "9.3 哈希表"），减少视觉噪音 */
+export function shortSection(s: string | null | undefined): string {
+  if (!s) return ''
+  const parts = s.split(' > ').filter(Boolean)
+  return parts.length > 0 ? parts[parts.length - 1] : s
+}
+
 // ---------- 示例问题（按库内容动态生成） ----------
 export const suggestApi = {
   questions: (kbId: number) =>

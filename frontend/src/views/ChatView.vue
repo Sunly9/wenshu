@@ -3,7 +3,7 @@ import { computed, nextTick, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { chatStream } from '../api/sse'
-import { errMsg, kbApi, locateApi, quizApi, suggestApi } from '../api/http'
+import { errMsg, kbApi, locateApi, quizApi, suggestApi, shortSection } from '../api/http'
 import { isDevMode } from '../api/visitor'
 import type { DocStatus, GradeItem, LocateItem, QuizQuestion } from '../api/http'
 import type { Citation, DoneMeta } from '../api/types'
@@ -270,7 +270,7 @@ function onKeyEnter(event: KeyboardEvent) {
         <el-card v-for="item in locateResults" :key="item.chunkId" class="locate-card" shadow="never">
           <div class="locate-src">
             {{ item.file }}<template v-if="item.page"> · 第{{ item.page }}页</template>
-            <template v-if="item.section"> · {{ item.section }}</template>
+            <template v-if="item.section"> · {{ shortSection(item.section) }}</template>
             <span v-if="item.score" class="locate-score">相关度 {{ item.score }}</span>
           </div>
           <div class="locate-content">{{ item.content }}</div>
@@ -321,7 +321,7 @@ function onKeyEnter(event: KeyboardEvent) {
                 <span class="cite-n">[{{ c.n }}]</span>
                 <span class="cite-src">
                   {{ c.file }}<template v-if="c.page"> · 第{{ c.page }}页</template>
-                  <template v-if="c.section"> · {{ c.section }}</template>
+                  <template v-if="c.section"> · {{ shortSection(c.section) }}</template>
                 </span>
               </div>
             </div>
