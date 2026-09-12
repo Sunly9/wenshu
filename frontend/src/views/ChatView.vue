@@ -3,8 +3,8 @@ import { computed, nextTick, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { chatStream } from '../api/sse'
-import { errMsg, locateApi } from '../api/http'
-import type { LocateItem } from '../api/http'
+import { errMsg, kbApi, locateApi, quizApi } from '../api/http'
+import type { DocStatus, GradeItem, LocateItem, QuizQuestion } from '../api/http'
 import type { Citation, DoneMeta } from '../api/types'
 
 interface AssistantMessage {
@@ -33,9 +33,58 @@ const listEl = ref<HTMLElement>()
 const dialogSnippet = ref<Citation | null>(null)
 
 // 查模式（原文定位）
-const mode = ref<'ask' | 'locate'>('ask')
+const mode = ref<'ask' | 'locate' | 'quiz'>('ask')
 const locateResults = ref<LocateItem[]>([])
 const locating = ref(false)
+
+// 练模式（出题判分）
+const quizDocs = ref<DocStatus[]>([])
+const quizDocId = ref('')
+const quizSection = ref('')
+const quizQuestions = ref<QuizQuestion[]>([])
+const quizAnswers = reactive<string[]>([])
+const quizGrades = ref<GradeItem[] | null>(null)
+const quizing = ref(false)
+
+async function loadQuizDocs() {
+  if (quizDocs.value.length > 0) return
+  try {
+    quizDocs.value = (await kbApi.documents(kbId)).filter((d) => d.status === 'READY')
+  } catch {
+    /* 静默 */
+  }
+}
+
+async function watchMode() {
+  if (mode.value === 'quiz') await loadQuizDocs()
+}
+
+async function generateQuiz() {
+  if (quizing.value) return
+  quizing.value = true
+  quizGrades.value = null
+  try {
+    quizQuestions.value = await quizApi.generate(kbId, quizDocId.value || undefined, quizSection.value || undefined)
+    quizAnswers.length = 0
+    quizQuestions.value.forEach(() => quizAnswers.push(''))
+  } catch (e) {
+    ElMessage.error(errMsg(e))
+  } finally {
+    quizing.value = false
+  }
+}
+
+async function submitQuiz() {
+  if (quizing.value) return
+  quizing.value = true
+  try {
+    quizGrades.value = await quizApi.grade(kbId, quizQuestions.value, [...quizAnswers])
+  } catch (e) {
+    ElMessage.error(errMsg(e))
+  } finally {
+    quizing.value = false
+  }
+}
 
 const canSend = computed(() => question.value.trim().length > 0 && !streaming.value)
 
@@ -127,14 +176,72 @@ function onKeyEnter(event: KeyboardEvent) {
 <template>
   <div class="chat-page">
     <div class="mode-bar">
-      <el-radio-group v-model="mode" size="small">
+      <el-radio-group v-model="mode" size="small" @change="watchMode">
         <el-radio-button value="ask">问（AI 回答，带出处）</el-radio-button>
         <el-radio-button value="locate">查（只找原文段落）</el-radio-button>
+        <el-radio-button value="quiz">练（自动出题判分）</el-radio-button>
       </el-radio-group>
     </div>
 
+    <!-- 练模式：出题与判分 -->
+    <div v-if="mode === 'quiz'" class="quiz-wrap">
+      <div class="quiz-scope">
+        <el-select v-model="quizDocId" placeholder="出题范围：整个资料库" clearable style="width: 260px">
+          <el-option v-for="d in quizDocs" :key="d.documentId" :label="d.fileName" :value="String(d.documentId)" />
+        </el-select>
+        <el-input v-model="quizSection" placeholder="章节（可选，如：第9章）" style="width: 200px" />
+        <el-button type="primary" :loading="quizing" @click="generateQuiz">生成 5 道题</el-button>
+      </div>
+
+      <div class="quiz-list">
+        <el-empty v-if="quizQuestions.length === 0" description="选好范围点生成——题目全部来自你上传的资料" />
+        <el-card v-for="(q, qi) in quizQuestions" :key="qi" class="quiz-card" shadow="never">
+          <div class="quiz-stem">{{ qi + 1 }}. [{{ q.type === 'single' ? '单选' : '简答' }}] {{ q.stem }}</div>
+          <template v-if="q.type === 'single'">
+            <el-radio-group v-model="quizAnswers[qi]" :disabled="!!quizGrades">
+              <div v-for="opt in q.options" :key="opt" class="quiz-opt">
+                <el-radio :value="opt.charAt(0)">{{ opt }}</el-radio>
+              </div>
+            </el-radio-group>
+          </template>
+          <el-input
+            v-else
+            v-model="quizAnswers[qi]"
+            type="textarea"
+            :rows="3"
+            placeholder="用自己的话回答，判分会对照原文指出你漏掉的句子"
+            :disabled="!!quizGrades"
+          />
+          <template v-if="quizGrades">
+            <div class="quiz-grade" :class="{ good: quizGrades[qi].score >= 60 }">
+              <template v-if="quizGrades[qi].correct !== null">
+                {{ quizGrades[qi].correct ? '✓ 答对' : '✗ 答错' }} · {{ quizGrades[qi].comment }}
+              </template>
+              <template v-else>
+                得分 {{ quizGrades[qi].score }}/100 · {{ quizGrades[qi].comment }}
+              </template>
+            </div>
+            <div v-if="quizGrades[qi].missedSentences.length" class="quiz-missed">
+              <div class="missed-title">你漏掉的原文：</div>
+              <div v-for="(s, si) in quizGrades[qi].missedSentences" :key="si" class="missed-sentence">{{ s }}</div>
+            </div>
+          </template>
+        </el-card>
+      </div>
+
+      <div v-if="quizQuestions.length" class="input-bar">
+        <el-button v-if="!quizGrades" type="primary" :loading="quizing" @click="submitQuiz">交卷判分</el-button>
+        <template v-else>
+          <el-button type="primary" @click="generateQuiz">再来一组</el-button>
+          <span class="quiz-total">
+            总分 {{ quizGrades.reduce((a, g) => a + g.score, 0) / quizGrades.length }} / 100
+          </span>
+        </template>
+      </div>
+    </div>
+
     <!-- 查模式：段落卡片列表 -->
-    <div v-if="mode === 'locate'" class="locate-wrap">
+    <div v-else-if="mode === 'locate'" class="locate-wrap">
       <div ref="listEl" class="locate-list">
         <el-empty v-if="locateResults.length === 0 && !locating" description="丢一段话、一个术语、甚至半句记不全的话——直接定位到原文" />
         <el-card v-for="item in locateResults" :key="item.chunkId" class="locate-card" shadow="never">
@@ -241,6 +348,64 @@ function onKeyEnter(event: KeyboardEvent) {
 }
 .mode-bar {
   padding: 8px 12px 0;
+}
+.quiz-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.quiz-scope {
+  display: flex;
+  gap: 10px;
+  padding: 10px 14px;
+}
+.quiz-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 14px 14px;
+}
+.quiz-card {
+  margin-bottom: 10px;
+}
+.quiz-stem {
+  font-weight: 600;
+  margin-bottom: 8px;
+  line-height: 1.6;
+}
+.quiz-opt {
+  padding: 2px 0;
+}
+.quiz-grade {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #f56c6c;
+}
+.quiz-grade.good {
+  color: #67c23a;
+}
+.quiz-missed {
+  margin-top: 6px;
+  background: var(--ws-bg);
+  border-left: 3px solid #e6a23c;
+  padding: 8px 10px;
+  border-radius: 4px;
+}
+.missed-title {
+  font-size: 12px;
+  color: #e6a23c;
+  margin-bottom: 4px;
+}
+.missed-sentence {
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ws-text);
+}
+.quiz-total {
+  align-self: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ws-primary);
 }
 .locate-wrap {
   flex: 1;

@@ -2,6 +2,8 @@ import axios from 'axios'
 import { getVisitorId } from './visitor'
 import type { DocStatus, KbInfo } from './types'
 
+export type { DocStatus, KbInfo }
+
 export const http = axios.create({ baseURL: '/api' })
 
 http.interceptors.request.use((config) => {
@@ -132,4 +134,32 @@ export interface LocateItem {
 export const locateApi = {
   query: (kbId: number, query: string) =>
     http.post<LocateItem[]>(`/kb/${kbId}/locate`, { query }).then((r) => r.data),
+}
+
+// ---------- 练模式（出题判分） ----------
+export interface QuizQuestion {
+  type: 'single' | 'short'
+  stem: string
+  options: string[]
+  answer: string
+  explanation: string
+  sourceChunkIds: number[]
+}
+
+export interface GradeItem {
+  index: number
+  type: 'single' | 'short'
+  correct: boolean | null
+  score: number
+  comment: string
+  missedSentences: string[]
+}
+
+export const quizApi = {
+  generate: (kbId: number, documentId?: string, sectionPrefix?: string) =>
+    http
+      .post<QuizQuestion[]>(`/kb/${kbId}/quiz/generate`, { documentId, sectionPrefix })
+      .then((r) => r.data),
+  grade: (kbId: number, questions: QuizQuestion[], userAnswers: string[]) =>
+    http.post<GradeItem[]>(`/kb/${kbId}/quiz/grade`, { questions, userAnswers }).then((r) => r.data),
 }

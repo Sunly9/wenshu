@@ -69,6 +69,33 @@ public class LlmClient {
                 .mapNotNull(this::parse);
     }
 
+    /** 阻塞式补全（出题/判分/评测等非流式场景）；jsonMode 要求模型输出合法 JSON */
+    public String complete(String systemPrompt, String userPrompt, boolean jsonMode, double temperature) {
+        java.util.Map<String, Object> body = new java.util.HashMap<>();
+        body.put("model", model);
+        body.put("messages", List.of(
+                Map.of("role", "system", "content", systemPrompt),
+                Map.of("role", "user", "content", userPrompt)));
+        body.put("stream", false);
+        body.put("temperature", temperature);
+        body.put("max_tokens", 2048);
+        if (jsonMode) {
+            body.put("response_format", Map.of("type", "json_object"));
+        }
+        String response = webClient.post()
+                .uri("/chat/completions")
+                .bodyValue(body)
+                .retrieve()
+                .bodyToMono(String.class)
+                .block(java.time.Duration.ofSeconds(90));
+        try {
+            JsonNode root = mapper.readTree(response);
+            return root.path("choices").path(0).path("message").path("content").asText("");
+        } catch (Exception e) {
+            throw new IllegalStateException("LLM 响应解析失败：" + e.getMessage(), e);
+        }
+    }
+
     private LlmChunk parse(String json) {
         try {
             JsonNode root = mapper.readTree(json);
