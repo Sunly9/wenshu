@@ -20,18 +20,20 @@ public class QueryLogService {
 
     public long save(long kbId, String visitorId, String question,
                      List<Map<String, Object>> retrieved, List<Long> chosenIds,
-                     String answer, long latencyMs, Integer promptTokens, Integer completionTokens) {
+                     String answer, long latencyMs, Integer promptTokens, Integer completionTokens,
+                     Map<String, Object> retrievalMeta) {
         try {
             String retrievedJson = mapper.writeValueAsString(retrieved);
+            String metaJson = retrievalMeta == null ? null : mapper.writeValueAsString(retrievalMeta);
             String chosenArray = chosenIds.stream().map(String::valueOf)
                     .reduce((a, b) -> a + "," + b).map(s -> "{" + s + "}").orElse("{}");
             jdbc.update("""
                             INSERT INTO query_log(kb_id, visitor_id, question, retrieved, chosen_ids,
-                                                  answer, latency_ms, prompt_tokens, completion_tokens)
-                            VALUES (?, ?, ?, ?::jsonb, ?::bigint[], ?, ?, ?, ?)
+                                                  answer, latency_ms, prompt_tokens, completion_tokens, retrieval_meta)
+                            VALUES (?, ?, ?, ?::jsonb, ?::bigint[], ?, ?, ?, ?, ?::jsonb)
                             """,
                     kbId, visitorId, question, retrievedJson, chosenArray, answer, (int) latencyMs,
-                    promptTokens, completionTokens);
+                    promptTokens, completionTokens, metaJson);
             return jdbc.queryForObject("SELECT max(id) FROM query_log", Long.class);
         } catch (Exception e) {
             return -1;  // 日志失败不阻断问答主流程

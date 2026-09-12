@@ -46,8 +46,7 @@ export const kbApi = {
   },
 }
 
-export interface ChunkPreviewResponse {
-  strategy: string
+export interface ChunkPreviewResponse {  strategy: string
   pageCount: number
   parentCount: number
   childCount: number
@@ -65,4 +64,56 @@ export interface PreviewBlock {
   pageNo: number | null
   table: boolean
   content: string
+}
+
+// ---------- 检索调试台 ----------
+export interface DebugCandidate {
+  chunkId: number
+  file: string
+  section: string | null
+  page: number | null
+  snippet: string
+  tokenCount: number
+  vectorScore?: number
+  ftsScore?: number
+  rrfScore: number
+  rerankScore?: number
+  vectorRank?: number
+  ftsRank?: number
+}
+
+export interface DebugMeta {
+  vectorCount: number
+  ftsCount: number
+  fusedCount: number
+  rerankCount: number
+  vectorMs: number
+  ftsMs: number
+  fuseMs: number
+  rerankMs: number
+}
+
+export interface DebugResp {
+  queryId: number
+  kbId: number
+  question: string
+  answer: string | null
+  latencyMs: number
+  retrieved: DebugCandidate[]
+  chosenIds: number[]
+  meta: DebugMeta | null
+  createdAt: string
+}
+
+export const debugApi = {
+  query: (kbId: number, question: string) =>
+    http.post<DebugResp>(`/kb/${kbId}/debug-query`, { question }).then((r) => r.data),
+  byId: (queryId: number) => http.get<DebugResp>(`/debug/${queryId}`).then((r) => r.data),
+  recent: (kbId: number) =>
+    http
+      .get<{ id: number; question: string; latency_ms: number; created_at: string }[]>(
+        `/kb/${kbId}/debug/recent`,
+        { params: { limit: 15 } },
+      )
+      .then((r) => r.data),
 }

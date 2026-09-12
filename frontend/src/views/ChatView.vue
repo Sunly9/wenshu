@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { chatStream } from '../api/sse'
 import type { Citation, DoneMeta } from '../api/types'
 
@@ -20,6 +20,7 @@ interface UserMessage {
 type Message = UserMessage | AssistantMessage
 
 const route = useRoute()
+const router = useRouter()
 const kbId = Number(route.params.kbId)
 
 const messages = reactive<Message[]>([])
@@ -129,6 +130,9 @@ function onKeyEnter(event: KeyboardEvent) {
             <div v-if="m.done && m.meta?.latencyMs" class="meta">
               {{ m.meta.latencyMs }}ms<template v-if="m.meta.completionTokens"> · {{ m.meta.completionTokens }} tokens</template>
               <template v-if="m.meta.error"> · {{ m.meta.error }}</template>
+              <template v-if="m.meta.queryId && m.meta.queryId > 0">
+                · <a class="debug-link" @click="router.push(`/debug/${kbId}?qid=${m.meta.queryId}`)">查看检索过程</a>
+              </template>
             </div>
           </template>
         </div>
@@ -242,6 +246,11 @@ function onKeyEnter(event: KeyboardEvent) {
   margin-top: 6px;
   font-size: 11px;
   color: var(--ws-text-light);
+}
+.debug-link {
+  color: var(--ws-primary);
+  cursor: pointer;
+  text-decoration: underline;
 }
 .input-bar {
   display: flex;

@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 检索编排：向量 50 + 关键词 50 → RRF 融合 30 → Rerank 精排留 8（00 号文档 §6 冻结参数）。
@@ -64,7 +65,7 @@ public class RetrievalService {
                 kbId, byVector.size(), vectorMs, byFts.size(), ftsMs, fused.size(), fuseMs,
                 reranked.size(), rerankMs,
                 reranked.isEmpty() ? "-" : String.format("%.3f", reranked.get(0).rerankScore()));
-        return new RetrievalResult(byVector, byFts, scored, reranked, vectorMs, ftsMs, fuseMs, rerankMs);
+        return new RetrievalResult(byVector, byFts, fused, scored, reranked, vectorMs, ftsMs, fuseMs, rerankMs);
     }
 
     /** 精排失败自动降级为纯 RRF 序（03 号文档 §5.1 降级路径），返回带分的完整候选（排序后） */
@@ -85,10 +86,57 @@ public class RetrievalService {
         return result;
     }
 
+    /** 漏斗计数 + 各阶段耗时（query_log.retrieval_meta，调试台数据源） */
+    public Map<String, Object> meta(RetrievalResult r) {
+        Map<String, Object> meta = new java.util.HashMap<>();
+        meta.put("vectorCount", r.vectorRecalled().size());
+        meta.put("ftsCount", r.ftsRecalled().size());
+        meta.put("fusedCount", r.fused().size());
+        meta.put("rerankCount", r.scored().size());
+        meta.put("vectorMs", r.vectorMs());
+        meta.put("ftsMs", r.ftsMs());
+        meta.put("fuseMs", r.fuseMs());
+        meta.put("rerankMs", r.rerankMs());
+        return meta;
+    }
+
+    /** 精排候选明细（含出处与内容摘录，query_log.retrieved） */
+    public List<Map<String, Object>> candidatesDetail(RetrievalResult r) {
+        List<Map<String, Object>> detail = new ArrayList<>();
+        for (FusedChunk f : r.scored()) {
+            RetrievedChunk c = f.chunk();
+            Map<String, Object> m = new java.util.HashMap<>();
+            m.put("chunkId", c.chunkId());
+            m.put("file", c.fileName());
+            m.put("section", c.sectionPath());
+            m.put("page", c.pageNo());
+            m.put("snippet", snippet(c.content(), 300));
+            m.put("tokenCount", c.tokenCount());
+            if (f.vectorScore() != null) m.put("vectorScore", round4(f.vectorScore()));
+            if (f.ftsScore() != null) m.put("ftsScore", round4(f.ftsScore()));
+            m.put("rrfScore", round4(f.rrfScore()));
+            if (f.rerankScore() != null) m.put("rerankScore", round4(f.rerankScore()));
+            if (f.vectorRank() != null) m.put("vectorRank", f.vectorRank());
+            if (f.ftsRank() != null) m.put("ftsRank", f.ftsRank());
+            detail.add(m);
+        }
+        return detail;
+    }
+
+    private String snippet(String content, int max) {
+        String s = content.replaceAll("\\s+", " ").trim();
+        return s.length() <= max ? s : s.substring(0, max) + "…";
+    }
+
+    private double round4(double v) {
+        return Math.round(v * 10000) / 10000.0;
+    }
+
     public record RetrievalResult(
             List<RetrievedChunk> vectorRecalled,
             List<RetrievedChunk> ftsRecalled,
             List<FusedChunk> fused,
+            List<FusedChunk> scored,
             List<FusedChunk> reranked,
             long vectorMs,
             long ftsMs,

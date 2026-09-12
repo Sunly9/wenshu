@@ -85,15 +85,17 @@ onMounted(load)
             <span v-if="kb.owner" class="kb-owner">我创建的 · 口令 {{ kb.shareCode }}</span>
             <span v-else>已通过口令加入</span>
           </div>
-          <el-button
-            class="kb-chat"
-            type="primary"
-            text
-            :icon="ChatDotRound"
-            @click.stop="router.push(`/chat/${kb.id}`)"
-          >
-            开始提问
-          </el-button>
+          <div class="kb-actions">
+            <el-button
+              type="primary"
+              text
+              :icon="ChatDotRound"
+              @click.stop="router.push(`/chat/${kb.id}`)"
+            >
+              开始提问
+            </el-button>
+            <el-button text size="small" @click.stop="router.push(`/debug/${kb.id}`)">调试台</el-button>
+          </div>
         </el-card>
       </el-col>
     </el-row>
@@ -161,9 +163,10 @@ onMounted(load)
 .kb-owner {
   color: var(--ws-primary);
 }
-.kb-chat {
+.kb-actions {
   margin-top: 8px;
-  padding: 0;
+  display: flex;
+  align-items: center;
 }
 .join-tip {
   margin-top: 10px;

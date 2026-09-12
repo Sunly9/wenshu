@@ -86,7 +86,8 @@ public class ChatService {
             safeSend.accept("token", Map.of("text", refuse));
             long latency = System.currentTimeMillis() - start;
             long queryId = queryLogService.save(req.kbId(), visitorId, req.question(),
-                    retrievedDetail(retrieval), List.of(), refuse, latency, null, null);
+                    retrievalService.candidatesDetail(retrieval), List.of(), refuse, latency, null, null,
+                    retrievalService.meta(retrieval));
             safeSend.accept("done", Map.of("queryId", queryId, "latencyMs", latency, "refused", true));
             emitter.complete();
             return emitter;
@@ -133,10 +134,11 @@ public class ChatService {
                     long latency = System.currentTimeMillis() - start;
                     long queryId = queryLogService.save(
                             req.kbId(), visitorId, req.question(),
-                            retrievedDetail(retrieval),
+                            retrievalService.candidatesDetail(retrieval),
                             contextBlocks.stream().map(RetrievedChunk::chunkId).toList(),
                             answer.toString(), latency,
-                            promptTokens.get(), completionTokens.get());
+                            promptTokens.get(), completionTokens.get(),
+                            retrievalService.meta(retrieval));
                     safeSend.accept("done", Map.of(
                             "queryId", queryId, "latencyMs", latency,
                             "promptTokens", promptTokens.get(), "completionTokens", completionTokens.get()));
@@ -145,27 +147,6 @@ public class ChatService {
                             req.kbId(), req.question(), top.size(), contextBlocks.size(), latency);
                 });
         return emitter;
-    }
-
-    /** retrieved JSONB 结构：[{chunkId, vectorScore, ftsScore, rrfScore, vectorRank, ftsRank}]，rerankScore D11 追加 */
-    private List<Map<String, Object>> retrievedDetail(RetrievalService.RetrievalResult retrieval) {
-        List<Map<String, Object>> detail = new ArrayList<>();
-        for (FusedChunk f : retrieval.fused()) {
-            Map<String, Object> m = new HashMap<>();
-            m.put("chunkId", f.chunk().chunkId());
-            if (f.vectorScore() != null) m.put("vectorScore", round4(f.vectorScore()));
-            if (f.ftsScore() != null) m.put("ftsScore", round4(f.ftsScore()));
-            m.put("rrfScore", round4(f.rrfScore()));
-            if (f.rerankScore() != null) m.put("rerankScore", round4(f.rerankScore()));
-            if (f.vectorRank() != null) m.put("vectorRank", f.vectorRank());
-            if (f.ftsRank() != null) m.put("ftsRank", f.ftsRank());
-            detail.add(m);
-        }
-        return detail;
-    }
-
-    private double round4(double v) {
-        return Math.round(v * 10000) / 10000.0;
     }
 
     private String snippet(String content, int max) {
