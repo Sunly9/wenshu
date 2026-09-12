@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/kb")
@@ -26,9 +27,20 @@ import java.util.List;
 public class KbController {
 
     private final KbService kbService;
+    private final com.docmind.service.SuggestService suggestService;
 
-    public KbController(KbService kbService) {
+    public KbController(KbService kbService, com.docmind.service.SuggestService suggestService) {
         this.kbService = kbService;
+        this.suggestService = suggestService;
+    }
+
+    /** 示例问题建议：按库内容动态生成（缓存，资料变化自动失效），对话页空状态用 */
+    @PostMapping("/{id}/suggest-questions")
+    public Map<String, Object> suggestQuestions(@PathVariable Long id,
+                                                @RequestHeader("X-Visitor-Id")
+                                                @NotBlank(message = "缺少访客标识")
+                                                @Size(max = 64) String visitorId) {
+        return Map.of("questions", suggestService.suggest(id, visitorId));
     }
 
     @PostMapping

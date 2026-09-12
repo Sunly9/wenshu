@@ -3,7 +3,7 @@ import { computed, nextTick, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { chatStream } from '../api/sse'
-import { errMsg, kbApi, locateApi, quizApi } from '../api/http'
+import { errMsg, kbApi, locateApi, quizApi, suggestApi } from '../api/http'
 import { isDevMode } from '../api/visitor'
 import type { DocStatus, GradeItem, LocateItem, QuizQuestion } from '../api/http'
 import type { Citation, DoneMeta } from '../api/types'
@@ -27,6 +27,23 @@ const route = useRoute()
 const router = useRouter()
 const kbId = Number(route.params.kbId)
 const devMode = ref(isDevMode())
+
+// 示例问题：按库内容动态生成
+const suggestions = ref<string[]>([])
+const suggestLoading = ref(false)
+
+async function loadSuggestions() {
+  if (suggestions.value.length > 0) return
+  suggestLoading.value = true
+  try {
+    suggestions.value = await suggestApi.questions(kbId)
+  } catch {
+    /* 静默，空状态不显示 chips */
+  } finally {
+    suggestLoading.value = false
+  }
+}
+loadSuggestions()
 
 const messages = reactive<Message[]>([])
 const question = ref('')
@@ -281,11 +298,11 @@ function onKeyEnter(event: KeyboardEvent) {
       <div v-if="messages.length === 0" class="welcome">
         <div class="welcome-title">问点什么吧 📖</div>
         <div class="welcome-sub">答案只来自你上传的资料，每句话都标出处；资料里没有的会直说"没找到依据"</div>
-        <div class="chips">
-          <span class="chip" @click="fillExample('什么是二叉排序树？')">什么是二叉排序树？</span>
-          <span class="chip" @click="fillExample('顺序表和链表插入删除的效率区别？')">顺序表和链表的区别？</span>
-          <span class="chip" @click="fillExample('迪杰斯特拉算法求最短路径的步骤')">迪杰斯特拉的步骤</span>
-          <span class="chip" @click="fillExample('起泡排序最坏情况要比较多少次？')">起泡排序最坏比较次数</span>
+        <div v-if="suggestLoading" class="chips"><span class="chip loading">正在根据你的资料想几个问题…</span></div>
+        <div v-else-if="suggestions.length" class="chips">
+          <span v-for="(q, i) in suggestions" :key="i" class="chip" :class="'c' + ((i % 4) + 1)" @click="fillExample(q)">
+            {{ q }}
+          </span>
         </div>
       </div>
       <div v-for="(m, i) in messages" :key="i" class="msg" :class="m.role">
@@ -399,17 +416,22 @@ function onKeyEnter(event: KeyboardEvent) {
 .chip:hover {
   border-color: currentColor;
 }
-.chip:nth-child(2) {
+.chip.c2 {
   background: var(--ws-green-soft);
   color: var(--ws-green);
 }
-.chip:nth-child(3) {
+.chip.c3 {
   background: var(--ws-orange-soft);
   color: var(--ws-orange);
 }
-.chip:nth-child(4) {
+.chip.c4 {
   background: var(--ws-purple-soft);
   color: var(--ws-purple);
+}
+.chip.loading {
+  cursor: default;
+  color: var(--ws-ink-light);
+  background: #f3f0e9;
 }
 .quiz-wrap {
   flex: 1;

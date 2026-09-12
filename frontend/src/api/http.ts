@@ -136,6 +136,12 @@ export const locateApi = {
     http.post<LocateItem[]>(`/kb/${kbId}/locate`, { query }).then((r) => r.data),
 }
 
+// ---------- 示例问题（按库内容动态生成） ----------
+export const suggestApi = {
+  questions: (kbId: number) =>
+    http.post<{ questions: string[] }>(`/kb/${kbId}/suggest-questions`).then((r) => r.data.questions),
+}
+
 // ---------- 练模式（出题判分） ----------
 export interface QuizQuestion {
   type: 'single' | 'short'
