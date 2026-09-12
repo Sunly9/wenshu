@@ -490,7 +490,7 @@ export default { name: 'DebugView' }
   margin: 0;
 }
 .sub {
-  color: var(--ws-text-light);
+  color: var(--ws-ink-light);
   font-size: 13px;
 }
 .query-card {
@@ -509,7 +509,7 @@ export default { name: 'DebugView' }
 }
 .recent-label {
   font-size: 12px;
-  color: var(--ws-text-light);
+  color: var(--ws-ink-light);
 }
 .recent-tag {
   cursor: pointer;
@@ -532,12 +532,12 @@ export default { name: 'DebugView' }
   min-width: 96px;
 }
 .stage.hot {
-  border-color: var(--ws-primary);
+  border-color: var(--ws-blue);
   background: #ecf5ff;
 }
 .stage-name {
   font-size: 12px;
-  color: var(--ws-text-light);
+  color: var(--ws-ink-light);
 }
 .stage-count {
   font-size: 22px;
@@ -546,10 +546,10 @@ export default { name: 'DebugView' }
 }
 .stage-ms {
   font-size: 11px;
-  color: var(--ws-text-light);
+  color: var(--ws-ink-light);
 }
 .arrow {
-  color: var(--ws-text-light);
+  color: var(--ws-ink-light);
 }
 .timing-bars {
   margin-top: 14px;
@@ -565,7 +565,7 @@ export default { name: 'DebugView' }
 .bar-name {
   width: 48px;
   font-size: 12px;
-  color: var(--ws-text-light);
+  color: var(--ws-ink-light);
   text-align: right;
 }
 .bar-track {
@@ -577,18 +577,18 @@ export default { name: 'DebugView' }
 }
 .bar-fill {
   height: 100%;
-  background: var(--ws-primary);
+  background: var(--ws-blue);
   border-radius: 4px;
 }
 .bar-ms {
   width: 70px;
   font-size: 12px;
-  color: var(--ws-text-light);
+  color: var(--ws-ink-light);
 }
 .hint {
   margin-left: 10px;
   font-size: 12px;
-  color: var(--ws-text-light);
+  color: var(--ws-ink-light);
   font-weight: 400;
 }
 .snippet {
@@ -597,11 +597,11 @@ export default { name: 'DebugView' }
 }
 .src {
   font-size: 11px;
-  color: var(--ws-text-light);
+  color: var(--ws-ink-light);
   margin-top: 2px;
 }
 .hi {
-  color: var(--ws-primary);
+  color: var(--ws-blue);
 }
 :deep(.chosen-row) {
   background: #f0f9eb;
@@ -618,7 +618,7 @@ export default { name: 'DebugView' }
 }
 .ablation-tip {
   font-size: 12px;
-  color: var(--ws-text-light);
+  color: var(--ws-ink-light);
 }
 .save-eval-btn {
   float: right;

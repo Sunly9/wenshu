@@ -2,7 +2,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ChatDotRound, Key, Plus } from '@element-plus/icons-vue'
+import { ChatDotRound, Key, Plus, Search } from '@element-plus/icons-vue'
 import { errMsg, kbApi } from '../api/http'
 import type { KbInfo } from '../api/types'
 
@@ -65,15 +65,30 @@ onMounted(load)
 
 <template>
   <div>
+    <!-- 新手引导横幅 -->
+    <div class="hero">
+      <div class="hero-title">你的私人备考助教</div>
+      <div class="hero-sub">每个答案都标明出自哪份资料第几页 · 资料里没有的明确拒答</div>
+      <div class="hero-steps">
+        <div class="step s1"><b>① 建资料库</b><span>按科目建，比如「数据结构期末」</span></div>
+        <div class="step s2"><b>② 丢资料进来</b><span>教材 / 讲义 / 真题，PDF 自动解析</span></div>
+        <div class="step s3"><b>③ 随便使唤</b><span>问它 · 查原文 · 让它出题考你</span></div>
+      </div>
+    </div>
+
     <div class="page-head">
       <h2>我的资料库</h2>
       <div>
-        <el-button :icon="Key" @click="joinDialog = true">口令加入</el-button>
+        <el-button :icon="Key" @click="joinDialog = true">有口令？加入同学的库</el-button>
         <el-button type="primary" :icon="Plus" @click="createDialog = true">新建资料库</el-button>
       </div>
     </div>
 
-    <el-empty v-if="!loading && kbs.length === 0" description="还没有资料库——建一个，把备考资料丢进来" />
+    <el-skeleton v-if="loading" :rows="3" animated style="margin-bottom: 16px" />
+    <el-empty
+      v-if="!loading && kbs.length === 0"
+      description="还没有资料库——点右上角「新建」，第一步三十秒"
+    />
 
     <el-row :gutter="16">
       <el-col v-for="kb in kbs" :key="kb.id" :xs="24" :sm="12" :md="8">
@@ -82,18 +97,14 @@ onMounted(load)
           <div class="kb-desc">{{ kb.description || '—' }}</div>
           <div class="kb-meta">
             <span>{{ kb.documentCount }} 份资料</span>
-            <span v-if="kb.owner" class="kb-owner">我创建的 · 口令 {{ kb.shareCode }}</span>
+            <span v-if="kb.owner" class="kb-owner">我创建的</span>
             <span v-else>已通过口令加入</span>
           </div>
           <div class="kb-actions">
-            <el-button
-              type="primary"
-              text
-              :icon="ChatDotRound"
-              @click.stop="router.push(`/chat/${kb.id}`)"
-            >
+            <el-button type="primary" text :icon="ChatDotRound" @click.stop="router.push(`/chat/${kb.id}`)">
               开始提问
             </el-button>
+            <el-button text :icon="Search" @click.stop="router.push(`/chat/${kb.id}`)">查原文</el-button>
             <el-button text size="small" @click.stop="router.push(`/debug/${kb.id}`)">调试台</el-button>
           </div>
         </el-card>
@@ -127,6 +138,54 @@ onMounted(load)
 </template>
 
 <style scoped>
+.hero {
+  border-radius: 14px;
+  padding: 22px 26px 18px;
+  margin-bottom: 18px;
+  background: linear-gradient(115deg, var(--ws-blue-soft) 0%, var(--ws-green-soft) 55%, var(--ws-orange-soft) 100%);
+  border: 1px solid var(--ws-border);
+}
+.hero-title {
+  font-size: 22px;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+.hero-sub {
+  font-size: 13px;
+  color: var(--ws-ink-light);
+  margin-bottom: 14px;
+}
+.hero-steps {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.step {
+  flex: 1;
+  min-width: 180px;
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.75);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.step b {
+  font-size: 13px;
+}
+.step span {
+  font-size: 12px;
+  color: var(--ws-ink-light);
+}
+.step.s1 b {
+  color: var(--ws-blue);
+}
+.step.s2 b {
+  color: var(--ws-green);
+}
+.step.s3 b {
+  color: var(--ws-orange);
+}
 .page-head {
   display: flex;
   justify-content: space-between;
@@ -139,14 +198,25 @@ onMounted(load)
 .kb-card {
   margin-bottom: 16px;
   cursor: pointer;
+  border-left: 4px solid var(--ws-blue);
+  transition: transform 0.15s;
+}
+.kb-card:hover {
+  transform: translateY(-2px);
+}
+.el-col:nth-child(3n + 2) .kb-card {
+  border-left-color: var(--ws-green);
+}
+.el-col:nth-child(3n) .kb-card {
+  border-left-color: var(--ws-orange);
 }
 .kb-title {
   font-size: 17px;
-  font-weight: 600;
+  font-weight: 700;
   margin-bottom: 6px;
 }
 .kb-desc {
-  color: var(--ws-text-light);
+  color: var(--ws-ink-light);
   font-size: 13px;
   min-height: 18px;
   margin-bottom: 10px;
@@ -158,19 +228,20 @@ onMounted(load)
   display: flex;
   gap: 12px;
   font-size: 12px;
-  color: var(--ws-text-light);
+  color: var(--ws-ink-light);
 }
 .kb-owner {
-  color: var(--ws-primary);
+  color: var(--ws-pink);
 }
 .kb-actions {
   margin-top: 8px;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
 }
 .join-tip {
   margin-top: 10px;
   font-size: 12px;
-  color: var(--ws-text-light);
+  color: var(--ws-ink-light);
 }
 </style>

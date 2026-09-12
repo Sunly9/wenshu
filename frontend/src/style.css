@@ -1,9 +1,35 @@
 :root {
-  --ws-primary: #3b6ef5;
-  --ws-border: #e4e7ed;
-  --ws-text: #303133;
-  --ws-text-light: #909399;
-  --ws-bg: #f5f7fa;
+  /* —— 低饱和多色（莫兰迪系）设计令牌 —— */
+  --ws-bg: #f7f4ee;            /* 米白底 */
+  --ws-card: #ffffff;
+  --ws-ink: #4e4a43;           /* 主文字：暖灰 */
+  --ws-ink-light: #98917f;
+  --ws-border: #eae4d8;
+
+  --ws-blue: #6e8faf;          /* 雾蓝 = 主色（问） */
+  --ws-blue-soft: #eaf0f6;
+  --ws-green: #7fa38b;         /* 灰绿（查） */
+  --ws-green-soft: #ebf2ed;
+  --ws-orange: #cf9b76;        /* 陶土橘（练） */
+  --ws-orange-soft: #f9efe6;
+  --ws-purple: #a294bd;        /* 雾紫（调试） */
+  --ws-purple-soft: #f1edf7;
+  --ws-pink: #c99aa8;          /* 藕粉（口令/共享） */
+  --ws-pink-soft: #f9eef1;
+  --ws-yellow: #cbb678;        /* 豆沙黄（引用角标） */
+  --ws-yellow-soft: #f7f2e2;
+}
+
+/* Element Plus 主题色覆盖为低饱和雾蓝 */
+:root {
+  --el-color-primary: #6e8faf;
+  --el-color-primary-light-3: #94abc4;
+  --el-color-primary-light-5: #b3c4d6;
+  --el-color-primary-light-7: #cfd9e4;
+  --el-color-primary-light-8: #dde4ec;
+  --el-color-primary-light-9: #ecf0f5;
+  --el-color-primary-dark-2: #5b7c9c;
+  --el-border-radius-base: 10px;
 }
 
 * {
@@ -13,7 +39,7 @@
 body {
   margin: 0;
   font-family: system-ui, 'Segoe UI', 'Microsoft YaHei', sans-serif;
-  color: var(--ws-text);
+  color: var(--ws-ink);
   background: var(--ws-bg);
 }
 
@@ -30,4 +56,14 @@ body {
   width: 100%;
   margin: 0 auto;
   padding: 20px;
+}
+
+/* 通用：卡片标题前的彩色圆点 */
+.dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: 1px;
 }

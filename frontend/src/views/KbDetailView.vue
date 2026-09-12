@@ -131,17 +131,24 @@ onUnmounted(() => window.clearInterval(timer))
     </div>
 
     <el-card class="upload-card">
+      <template #header>
+        <span class="dot" style="background: var(--ws-green)" />
+        <span class="card-title">上传资料</span>
+        <span class="card-sub">上传后自动解析、切块、建索引，就绪后即可提问（仅支持文字版，扫描件请先 OCR）</span>
+      </template>
       <label class="upload-zone">
         <input type="file" accept=".pdf,.docx,.md,.markdown" hidden @change="onFileChange" />
-        <span v-if="!uploading">📄 点击或拖入文件上传（PDF / Word / Markdown，≤ 50MB）</span>
+        <span v-if="!uploading">📄 点击选择文件（PDF / Word / Markdown，单个 ≤ 50MB）</span>
         <span v-else>上传中…</span>
       </label>
       <div class="share-bar">
         <template v-if="kb.owner">
-          <span>库口令：<b class="code">{{ kb.shareCode }}</b></span>
+          <span class="share-label"><span class="dot" style="background: var(--ws-pink)" />共享口令：</span>
+          <b class="code">{{ kb.shareCode }}</b>
           <el-button text size="small" :icon="CopyDocument" @click="copy(kb.shareCode)">复制口令</el-button>
           <el-button text size="small" :icon="CopyDocument" @click="copy(joinLink())">复制加入链接</el-button>
           <el-button text size="small" :icon="RefreshLeft" @click="resetCode">重置</el-button>
+          <span class="share-tip">把口令发给同学，Ta 输一次就能和你共用这个库</span>
         </template>
         <span v-else class="share-tip">此库由同学创建，你已通过口令加入</span>
       </div>
@@ -149,8 +156,9 @@ onUnmounted(() => window.clearInterval(timer))
 
     <el-card class="upload-card">
       <template #header>
+        <span class="dot" style="background: var(--ws-purple)" />
         <span class="card-title">分片预览</span>
-        <span class="card-sub">上传前先看看文档会被切成什么样——切得不合理换策略重切（不入库）</span>
+        <span class="card-sub">系统把文档切成"小块"来检索——上传前先看切得合不合理，不好就换策略重切（不入库）</span>
       </template>
       <div class="preview-controls">
         <el-select v-model="previewStrategy" style="width: 220px">
@@ -251,11 +259,11 @@ onUnmounted(() => window.clearInterval(timer))
   padding: 28px;
   text-align: center;
   cursor: pointer;
-  color: var(--ws-text-light);
+  color: var(--ws-ink-light);
 }
 .upload-zone:hover {
-  border-color: var(--ws-primary);
-  color: var(--ws-primary);
+  border-color: var(--ws-blue);
+  color: var(--ws-blue);
 }
 .share-bar {
   display: flex;
@@ -263,10 +271,10 @@ onUnmounted(() => window.clearInterval(timer))
   gap: 4px;
   margin-top: 10px;
   font-size: 13px;
-  color: var(--ws-text-light);
+  color: var(--ws-ink-light);
 }
 .code {
-  color: var(--ws-primary);
+  color: var(--ws-blue);
   letter-spacing: 3px;
   font-size: 15px;
 }
@@ -278,12 +286,16 @@ onUnmounted(() => window.clearInterval(timer))
   font-size: 12px;
 }
 .card-title {
-  font-weight: 600;
+  font-weight: 700;
 }
 .card-sub {
   margin-left: 10px;
   font-size: 12px;
-  color: var(--ws-text-light);
+  color: var(--ws-ink-light);
+  font-weight: 400;
+}
+.share-label {
+  font-size: 13px;
 }
 .preview-controls {
   display: flex;
@@ -296,22 +308,22 @@ onUnmounted(() => window.clearInterval(timer))
   padding: 6px 14px;
   cursor: pointer;
   font-size: 13px;
-  color: var(--ws-text-light);
+  color: var(--ws-ink-light);
   max-width: 320px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .preview-file:hover {
-  border-color: var(--ws-primary);
-  color: var(--ws-primary);
+  border-color: var(--ws-blue);
+  color: var(--ws-blue);
 }
 .preview-body {
   margin-top: 14px;
 }
 .preview-summary {
   font-size: 13px;
-  color: var(--ws-text-light);
+  color: var(--ws-ink-light);
   margin-bottom: 8px;
 }
 .warn {
@@ -343,7 +355,7 @@ onUnmounted(() => window.clearInterval(timer))
   background: #ecf5ff;
 }
 .block-tok {
-  color: var(--ws-text-light);
+  color: var(--ws-ink-light);
   width: 44px;
   text-align: right;
 }
@@ -351,7 +363,7 @@ onUnmounted(() => window.clearInterval(timer))
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--ws-text-light);
+  color: var(--ws-ink-light);
 }
 .block-detail {
   flex: 1;
@@ -360,7 +372,7 @@ onUnmounted(() => window.clearInterval(timer))
 }
 .detail-meta {
   font-size: 12px;
-  color: var(--ws-text-light);
+  color: var(--ws-ink-light);
   margin-bottom: 8px;
 }
 .detail-content {

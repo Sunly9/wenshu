@@ -165,6 +165,10 @@ async function scrollBottom() {
   if (listEl.value) listEl.value.scrollTop = listEl.value.scrollHeight
 }
 
+function fillExample(q: string) {
+  question.value = q
+}
+
 function onKeyEnter(event: KeyboardEvent) {
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
@@ -272,10 +276,16 @@ function onKeyEnter(event: KeyboardEvent) {
     <!-- 问模式：对话 -->
     <template v-else>
     <div ref="listEl" class="msg-list" @click="onCitationClick">
-      <el-empty
-        v-if="messages.length === 0"
-        description="问点什么吧——答案只来自你上传的资料，每句话都标出处"
-      />
+      <div v-if="messages.length === 0" class="welcome">
+        <div class="welcome-title">问点什么吧 📖</div>
+        <div class="welcome-sub">答案只来自你上传的资料，每句话都标出处；资料里没有的会直说"没找到依据"</div>
+        <div class="chips">
+          <span class="chip" @click="fillExample('什么是二叉排序树？')">什么是二叉排序树？</span>
+          <span class="chip" @click="fillExample('顺序表和链表插入删除的效率区别？')">顺序表和链表的区别？</span>
+          <span class="chip" @click="fillExample('迪杰斯特拉算法求最短路径的步骤')">迪杰斯特拉的步骤</span>
+          <span class="chip" @click="fillExample('起泡排序最坏情况要比较多少次？')">起泡排序最坏比较次数</span>
+        </div>
+      </div>
       <div v-for="(m, i) in messages" :key="i" class="msg" :class="m.role">
         <div class="bubble">
           <template v-if="m.role === 'user'">{{ m.text }}</template>
@@ -347,7 +357,57 @@ function onKeyEnter(event: KeyboardEvent) {
   border-radius: 10px;
 }
 .mode-bar {
-  padding: 8px 12px 0;
+  padding: 10px 12px 6px;
+  background: linear-gradient(115deg, var(--ws-blue-soft), var(--ws-green-soft) 60%, var(--ws-orange-soft));
+  border-radius: 10px 10px 0 0;
+}
+.mode-bar :deep(.el-radio-button__inner) {
+  border: none;
+  background: rgba(255, 255, 255, 0.72);
+}
+.welcome {
+  text-align: center;
+  padding: 44px 20px 20px;
+}
+.welcome-title {
+  font-size: 20px;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+.welcome-sub {
+  font-size: 13px;
+  color: var(--ws-ink-light);
+  margin-bottom: 18px;
+}
+.chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.chip {
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--ws-blue-soft);
+  color: var(--ws-blue);
+  font-size: 13px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.chip:hover {
+  border-color: currentColor;
+}
+.chip:nth-child(2) {
+  background: var(--ws-green-soft);
+  color: var(--ws-green);
+}
+.chip:nth-child(3) {
+  background: var(--ws-orange-soft);
+  color: var(--ws-orange);
+}
+.chip:nth-child(4) {
+  background: var(--ws-purple-soft);
+  color: var(--ws-purple);
 }
 .quiz-wrap {
   flex: 1;
@@ -399,13 +459,13 @@ function onKeyEnter(event: KeyboardEvent) {
 .missed-sentence {
   font-size: 12px;
   line-height: 1.7;
-  color: var(--ws-text);
+  color: var(--ws-ink);
 }
 .quiz-total {
   align-self: center;
   font-size: 14px;
   font-weight: 600;
-  color: var(--ws-primary);
+  color: var(--ws-blue);
 }
 .locate-wrap {
   flex: 1;
@@ -423,12 +483,12 @@ function onKeyEnter(event: KeyboardEvent) {
 }
 .locate-src {
   font-size: 12px;
-  color: var(--ws-text-light);
+  color: var(--ws-ink-light);
   margin-bottom: 6px;
 }
 .locate-score {
   float: right;
-  color: var(--ws-primary);
+  color: var(--ws-blue);
 }
 .locate-content {
   font-size: 13px;
@@ -449,7 +509,7 @@ function onKeyEnter(event: KeyboardEvent) {
   justify-content: flex-end;
 }
 .msg.user .bubble {
-  background: var(--ws-primary);
+  background: var(--ws-blue);
   color: #fff;
   border-radius: 12px 12px 2px 12px;
   max-width: 70%;
@@ -457,7 +517,8 @@ function onKeyEnter(event: KeyboardEvent) {
   white-space: pre-wrap;
 }
 .msg.assistant .bubble {
-  background: var(--ws-bg);
+  background: #faf8f3;
+  border: 1px solid var(--ws-border);
   border-radius: 12px 12px 12px 2px;
   max-width: 86%;
   padding: 10px 14px;
@@ -468,7 +529,7 @@ function onKeyEnter(event: KeyboardEvent) {
   word-break: break-word;
 }
 .answer :deep(.cite) {
-  color: var(--ws-primary);
+  color: var(--ws-blue);
   cursor: pointer;
   margin: 0 1px;
   font-weight: 600;
@@ -480,7 +541,7 @@ function onKeyEnter(event: KeyboardEvent) {
 }
 .cite-title {
   font-size: 12px;
-  color: var(--ws-text-light);
+  color: var(--ws-ink-light);
   margin-bottom: 6px;
 }
 .cite-item {
@@ -492,23 +553,23 @@ function onKeyEnter(event: KeyboardEvent) {
   white-space: nowrap;
 }
 .cite-item:hover {
-  color: var(--ws-primary);
+  color: var(--ws-blue);
 }
 .cite-n {
-  color: var(--ws-primary);
+  color: var(--ws-blue);
   font-weight: 600;
   margin-right: 6px;
 }
 .cite-src {
-  color: var(--ws-text-light);
+  color: var(--ws-ink-light);
 }
 .meta {
   margin-top: 6px;
   font-size: 11px;
-  color: var(--ws-text-light);
+  color: var(--ws-ink-light);
 }
 .debug-link {
-  color: var(--ws-primary);
+  color: var(--ws-blue);
   cursor: pointer;
   text-decoration: underline;
 }
@@ -521,7 +582,7 @@ function onKeyEnter(event: KeyboardEvent) {
 }
 .dialog-src {
   font-size: 13px;
-  color: var(--ws-text-light);
+  color: var(--ws-ink-light);
   margin-bottom: 8px;
 }
 .dialog-content {
