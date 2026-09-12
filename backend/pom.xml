@@ -76,6 +76,13 @@
       <version>0.64.8</version>
     </dependency>
 
+    <!-- 本地推理：ONNX Runtime(CPU)。分词器为纯 Java 自研 WordPiece（见 index/BertTokenizer） -->
+    <dependency>
+      <groupId>com.microsoft.onnxruntime</groupId>
+      <artifactId>onnxruntime</artifactId>
+      <version>1.20.0</version>
+    </dependency>
+
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>

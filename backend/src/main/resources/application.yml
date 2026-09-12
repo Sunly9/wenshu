@@ -27,6 +27,8 @@ server:
 
 wenshu:
   storage-dir: ./data/uploads   # 上传文件落盘目录（data/ 已在 .gitignore）
+  embedding:
+    model-dir: ./models/bge-small-zh-v1.5   # model.onnx + tokenizer.json（models/ 已在 .gitignore）
 
 management:
   endpoint:
