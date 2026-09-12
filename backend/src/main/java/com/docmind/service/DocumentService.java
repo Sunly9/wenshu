@@ -123,6 +123,15 @@ public class DocumentService {
         };
     }
 
+    /** 文件流（PDF 查看器用）：校验访问权后返回落盘路径 */
+    public Path storedFile(long documentId, String visitorId) {
+        Document doc = documentRepo.findById(documentId)
+                .orElseThrow(() -> new NotFoundException("文档不存在"));
+        kbService.requireAccessible(doc.getKbId(), visitorId);
+        return storageDir.resolve("kb-" + doc.getKbId())
+                .resolve(doc.getId() + "." + doc.getFileType());
+    }
+
     /** 防御：部分客户端上传的文件名带完整路径，只取最后一段 */
     private String basename(String name) {
         if (name == null || name.isBlank()) return "";

@@ -103,6 +103,7 @@ public class ChatService {
             Map<String, Object> m = new HashMap<>();
             m.put("n", i + 1);
             m.put("chunkId", c.chunkId());
+            m.put("docId", c.documentId());
             m.put("file", c.fileName());
             m.put("page", c.pageNo());
             m.put("section", c.sectionPath());

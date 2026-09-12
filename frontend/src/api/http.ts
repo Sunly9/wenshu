@@ -123,6 +123,7 @@ export const debugApi = {
 // ---------- 查模式（原文定位） ----------
 export interface LocateItem {
   chunkId: number
+  documentId?: number
   file: string
   section: string | null
   page: number | null

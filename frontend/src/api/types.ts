@@ -11,6 +11,7 @@ export interface KbInfo {
 export interface Citation {
   n: number
   chunkId: number
+  docId?: number
   file: string
   page: number | null
   section: string | null

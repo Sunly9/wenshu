@@ -47,6 +47,22 @@ public class DocumentController {
         return documentService.listByKb(kbId, visitorId);
     }
 
+    /** 文件流（PDF 查看器）：带访问校验地返回原始文件 */
+    @GetMapping("/api/documents/{id}/file")
+    public org.springframework.http.ResponseEntity<byte[]> file(@PathVariable Long id,
+                                                               @RequestHeader("X-Visitor-Id")
+                                                               @NotBlank(message = "缺少访客标识")
+                                                               @Size(max = 64) String visitorId) throws java.io.IOException {
+        java.nio.file.Path path = documentService.storedFile(id, visitorId);
+        byte[] bytes = java.nio.file.Files.readAllBytes(path);
+        String name = path.getFileName().toString().toLowerCase();
+        String media = name.endsWith(".pdf") ? "application/pdf"
+                : name.endsWith(".md") ? "text/markdown; charset=utf-8" : "application/octet-stream";
+        return org.springframework.http.ResponseEntity.ok()
+                .header("Content-Type", media)
+                .body(bytes);
+    }
+
     /** 分片预览：传策略与文件，不入库，直接返回切分结果（00 号文档 §7） */
     @PostMapping("/api/kb/{kbId}/chunks/preview")
     public com.docmind.api.dto.ChunkPreviewResponse previewChunks(

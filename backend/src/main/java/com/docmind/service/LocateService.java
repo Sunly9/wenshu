@@ -33,6 +33,7 @@ public class LocateService {
         for (FusedChunk f : retrieval.reranked()) {
             Map<String, Object> m = new HashMap<>();
             m.put("chunkId", f.chunk().chunkId());
+            m.put("documentId", f.chunk().documentId());
             m.put("file", f.chunk().fileName());
             m.put("section", f.chunk().sectionPath());
             m.put("page", f.chunk().pageNo());

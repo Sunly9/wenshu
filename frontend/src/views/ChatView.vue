@@ -5,6 +5,7 @@ import { ElMessage } from 'element-plus'
 import { chatStream } from '../api/sse'
 import { errMsg, kbApi, locateApi, quizApi, suggestApi, shortSection } from '../api/http'
 import { isDevMode } from '../api/visitor'
+import PdfViewDialog from '../components/PdfViewDialog.vue'
 import type { DocStatus, GradeItem, LocateItem, QuizQuestion } from '../api/http'
 import type { Citation, DoneMeta } from '../api/types'
 
@@ -122,7 +123,28 @@ function onCitationClick(event: MouseEvent) {
   const n = Number(target.getAttribute('data-n'))
   const last = [...messages].reverse().find((m) => m.role === 'assistant') as AssistantMessage | undefined
   const citation = last?.citations.find((c) => c.n === n)
-  if (citation) dialogSnippet.value = citation
+  if (citation) {
+    if (citation.docId && citation.page) {
+      openSource(citation.docId, citation.page, citation.snippet)
+    } else {
+      dialogSnippet.value = citation
+    }
+  }
+}
+
+// PDF 原文跳转：有 docId+页码则开 PDF 查看器并高亮，否则退回文本片段弹窗
+const pdfView = ref(false)
+const pdfDocId = ref<number | null>(null)
+const pdfPage = ref<number | null>(null)
+const pdfSnippet = ref('')
+
+function openSource(docId: number | undefined | null, page: number | null, snippet: string) {
+  if (docId && page) {
+    pdfDocId.value = docId
+    pdfPage.value = page
+    pdfSnippet.value = snippet
+    pdfView.value = true
+  }
 }
 
 async function send() {
@@ -267,11 +289,18 @@ function onKeyEnter(event: KeyboardEvent) {
     <div v-else-if="mode === 'locate'" class="locate-wrap">
       <div ref="listEl" class="locate-list">
         <el-empty v-if="locateResults.length === 0 && !locating" description="丢一段话、一个术语、甚至半句记不全的话——直接定位到原文" />
-        <el-card v-for="item in locateResults" :key="item.chunkId" class="locate-card" shadow="never">
+        <el-card
+          v-for="item in locateResults"
+          :key="item.chunkId"
+          class="locate-card clickable"
+          shadow="hover"
+          @click="openSource(item.documentId, item.page, item.content.slice(0, 60))"
+        >
           <div class="locate-src">
             {{ item.file }}<template v-if="item.page"> · 第{{ item.page }}页</template>
             <template v-if="item.section"> · {{ shortSection(item.section) }}</template>
             <span v-if="item.score" class="locate-score">相关度 {{ item.score }}</span>
+            <span v-if="item.documentId && item.page" class="locate-jump">📄 看原文</span>
           </div>
           <div class="locate-content">{{ item.content }}</div>
         </el-card>
@@ -311,12 +340,12 @@ function onKeyEnter(event: KeyboardEvent) {
           <template v-else>
             <div class="answer" v-html="renderAnswer(m.text) || (streaming && i === messages.length - 1 ? '思考中…' : '')" />
             <div v-if="m.citations.length > 0" class="citations">
-              <div class="cite-title">答案依据（点击角标或这里查看原文）</div>
+              <div class="cite-title">答案依据（点击角标或这里，跳到 PDF 原文位置）</div>
               <div
                 v-for="c in m.citations"
                 :key="c.n"
                 class="cite-item"
-                @click="dialogSnippet = c"
+                @click="c.docId && c.page ? openSource(c.docId, c.page, c.snippet) : (dialogSnippet = c)"
               >
                 <span class="cite-n">[{{ c.n }}]</span>
                 <span class="cite-src">
@@ -358,11 +387,13 @@ function onKeyEnter(event: KeyboardEvent) {
         <div class="dialog-src">
           {{ dialogSnippet.file }}
           <template v-if="dialogSnippet.page"> · 第 {{ dialogSnippet.page }} 页</template>
-          <template v-if="dialogSnippet.section"> · {{ dialogSnippet.section }}</template>
+          <template v-if="dialogSnippet.section"> · {{ shortSection(dialogSnippet.section) }}</template>
         </div>
         <div class="dialog-content">{{ dialogSnippet.snippet }}</div>
       </template>
     </el-dialog>
+
+    <PdfViewDialog v-model:visible="pdfView" :doc-id="pdfDocId" :page="pdfPage" :snippet="pdfSnippet" />
   </div>
 </template>
 
@@ -504,6 +535,17 @@ function onKeyEnter(event: KeyboardEvent) {
 }
 .locate-card {
   margin-bottom: 10px;
+}
+.locate-card.clickable {
+  cursor: pointer;
+}
+.locate-card.clickable:hover {
+  border-color: var(--ws-green);
+}
+.locate-jump {
+  float: right;
+  color: var(--ws-green);
+  font-size: 12px;
 }
 .locate-src {
   font-size: 12px;
