@@ -2,8 +2,8 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { debugApi, errMsg } from '../api/http'
-import type { DebugCandidate, DebugResp } from '../api/http'
+import { debugApi, errMsg, evalApi } from '../api/http'
+import type { DebugCandidate, DebugResp, EvalRow, EvalStats, EvalType } from '../api/http'
 
 const route = useRoute()
 const kbId = Number(route.params.kbId)
@@ -66,9 +66,73 @@ async function loadById(queryId: number) {
 
 onMounted(async () => {
   await loadRecent()
+  await loadEvalStats()
   const qid = Number(route.query.qid)
   if (qid > 0) await loadById(qid)
 })
+
+// ---------- 评测集标注 ----------
+const evalStats = ref<EvalStats | null>(null)
+const evalRows = ref<EvalRow[]>([])
+const evalDialog = ref(false)
+const evalType = ref<EvalType>('FACT')
+const evalAnswer = ref('')
+const evalGold = ref<number[]>([])
+const savingEval = ref(false)
+
+async function loadEvalStats() {
+  try {
+    evalStats.value = await evalApi.stats(kbId)
+  } catch {
+    /* 静默 */
+  }
+}
+
+function openEvalDialog() {
+  if (!result.value) return
+  evalType.value = 'FACT'
+  evalAnswer.value = ''
+  evalGold.value = result.value.retrieved
+    .filter((c) => result.value?.chosenIds.includes(c.chunkId))
+    .map((c) => c.chunkId)
+  evalDialog.value = true
+}
+
+async function saveEval() {
+  if (savingEval.value) return
+  savingEval.value = true
+  try {
+    evalStats.value = await evalApi.add(kbId, {
+      question: result.value!.question,
+      type: evalType.value,
+      goldChunkIds: evalType.value === 'NO_ANSWER' ? [] : evalGold.value,
+      goldAnswer: evalAnswer.value,
+    })
+    ElMessage.success(`已保存（${evalStats.value.total}/50）`)
+    evalDialog.value = false
+  } catch (e) {
+    ElMessage.error(errMsg(e))
+  } finally {
+    savingEval.value = false
+  }
+}
+
+async function loadEvalRows() {
+  try {
+    evalRows.value = await evalApi.list(kbId)
+  } catch {
+    /* 静默 */
+  }
+}
+
+async function removeEval(id: number) {
+  try {
+    evalStats.value = await evalApi.remove(kbId, id)
+    await loadEvalRows()
+  } catch (e) {
+    ElMessage.error(errMsg(e))
+  }
+}
 </script>
 
 <template>
@@ -110,8 +174,13 @@ onMounted(async () => {
     </el-card>
 
     <template v-if="result">
-      <el-card class="funnel-card">
-        <template #header>召回漏斗</template>
+    <el-card v-if="result" class="funnel-card">
+      <template #header>
+        召回漏斗
+        <el-button class="save-eval-btn" size="small" type="primary" plain @click="openEvalDialog">
+          存为评测题
+        </el-button>
+      </template>
         <div class="funnel">
           <div class="stage">
             <div class="stage-name">向量召回</div>
@@ -205,6 +274,63 @@ onMounted(async () => {
       </el-card>
     </template>
     <el-empty v-else-if="!loading" description="输入问题执行一次检索，或点击最近查询回看" />
+
+    <!-- 评测集标注进度 -->
+    <el-card class="eval-card">
+      <template #header>
+        评测集标注（{{ evalStats?.total ?? 0 }}/50）
+        <el-button size="small" text @click="evalRows.length ? (evalRows = []) : loadEvalRows()">
+          {{ evalRows.length ? '收起' : '查看已标注' }}
+        </el-button>
+      </template>
+      <div class="eval-stats">
+        <el-tag>事实型 {{ evalStats?.FACT ?? 0 }}/25</el-tag>
+        <el-tag type="warning">多跳型 {{ evalStats?.MULTI_HOP ?? 0 }}/10</el-tag>
+        <el-tag type="success">表格型 {{ evalStats?.TABLE ?? 0 }}/8</el-tag>
+        <el-tag type="info">无答案 {{ evalStats?.NO_ANSWER ?? 0 }}/7</el-tag>
+      </div>
+      <el-table v-if="evalRows.length" :data="evalRows" size="small">
+        <el-table-column prop="type" label="题型" width="110" />
+        <el-table-column prop="question" label="问题" min-width="260" show-overflow-tooltip />
+        <el-table-column label="gold 块" width="100">
+          <template #default="{ row }">{{ (row.gold_chunk_ids || []).length }}</template>
+        </el-table-column>
+        <el-table-column label="" width="70">
+          <template #default="{ row }">
+            <el-button text type="danger" size="small" @click="removeEval(row.id)">删</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
+    <!-- 存为评测题对话框 -->
+    <el-dialog v-model="evalDialog" title="存为评测题" width="560px">
+      <div class="eval-q">问题：{{ result?.question }}</div>
+      <el-form label-width="80px">
+        <el-form-item label="题型">
+          <el-select v-model="evalType">
+            <el-option label="事实型（单点知识）" value="FACT" />
+            <el-option label="多跳型（跨章节）" value="MULTI_HOP" />
+            <el-option label="表格型（教材表格数据）" value="TABLE" />
+            <el-option label="无答案（资料里没有，期望拒答）" value="NO_ANSWER" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="evalType !== 'NO_ANSWER'" label="标准块">
+          <el-checkbox-group v-model="evalGold">
+            <el-checkbox v-for="c in result?.retrieved ?? []" :key="c.chunkId" :value="c.chunkId">
+              #{{ c.chunkId }} {{ c.snippet.slice(0, 28) }}…
+            </el-checkbox>
+          </el-checkbox-group>
+        </el-form-item>
+        <el-form-item label="答案要点">
+          <el-input v-model="evalAnswer" type="textarea" :rows="2" placeholder="参考答案要点（给 D19 裁判用，可简写）" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="evalDialog = false">取消</el-button>
+        <el-button type="primary" :loading="savingEval" @click="saveEval">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -346,5 +472,22 @@ export default { name: 'DebugView' }
 .ans-card .answer {
   white-space: pre-wrap;
   line-height: 1.8;
+}
+.save-eval-btn {
+  float: right;
+  margin-top: -6px;
+}
+.eval-card {
+  margin-bottom: 14px;
+}
+.eval-stats {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.eval-q {
+  font-weight: 600;
+  margin-bottom: 12px;
+  line-height: 1.6;
 }
 </style>

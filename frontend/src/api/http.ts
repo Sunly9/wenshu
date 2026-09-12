@@ -163,3 +163,32 @@ export const quizApi = {
   grade: (kbId: number, questions: QuizQuestion[], userAnswers: string[]) =>
     http.post<GradeItem[]>(`/kb/${kbId}/quiz/grade`, { questions, userAnswers }).then((r) => r.data),
 }
+
+// ---------- 评测集标注（D17） ----------
+export type EvalType = 'FACT' | 'MULTI_HOP' | 'TABLE' | 'NO_ANSWER'
+
+export interface EvalStats {
+  FACT: number
+  MULTI_HOP: number
+  TABLE: number
+  NO_ANSWER: number
+  total: number
+  [key: string]: number
+}
+
+export interface EvalRow {
+  id: number
+  type: EvalType
+  question: string
+  gold_chunk_ids: number[] | null
+  gold_answer: string
+}
+
+export const evalApi = {
+  add: (kbId: number, q: { question: string; type: EvalType; goldChunkIds: number[]; goldAnswer: string }) =>
+    http.post<EvalStats>(`/kb/${kbId}/eval/questions`, q).then((r) => r.data),
+  list: (kbId: number) => http.get<EvalRow[]>(`/kb/${kbId}/eval/questions`).then((r) => r.data),
+  stats: (kbId: number) => http.get<EvalStats>(`/kb/${kbId}/eval/stats`).then((r) => r.data),
+  remove: (kbId: number, id: number) =>
+    http.delete<EvalStats>(`/kb/${kbId}/eval/questions/${id}`).then((r) => r.data),
+}
