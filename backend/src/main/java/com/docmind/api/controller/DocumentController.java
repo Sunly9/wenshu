@@ -33,6 +33,14 @@ public class DocumentController {
         return documentService.upload(kbId, visitorId, file);
     }
 
+    @GetMapping("/api/kb/{kbId}/documents")
+    public java.util.List<DocumentStatusResponse> list(@PathVariable Long kbId,
+                                                       @RequestHeader("X-Visitor-Id")
+                                                       @NotBlank(message = "缺少访客标识")
+                                                       @Size(max = 64) String visitorId) {
+        return documentService.listByKb(kbId, visitorId);
+    }
+
     @GetMapping("/api/documents/{id}/status")
     public DocumentStatusResponse status(@PathVariable Long id,
                                          @RequestHeader("X-Visitor-Id")

@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
@@ -92,6 +93,17 @@ public class DocumentService {
         Document doc = documentRepo.findById(documentId)
                 .orElseThrow(() -> new NotFoundException("文档不存在"));
         kbService.requireAccessible(doc.getKbId(), visitorId);  // 防跨库越权查询
+        return toStatusResponse(doc);
+    }
+
+    public List<DocumentStatusResponse> listByKb(Long kbId, String visitorId) {
+        kbService.requireAccessible(kbId, visitorId);
+        return documentRepo.findByKbIdOrderByCreatedAtDesc(kbId).stream()
+                .map(this::toStatusResponse)
+                .toList();
+    }
+
+    private DocumentStatusResponse toStatusResponse(Document doc) {
         return new DocumentStatusResponse(
                 doc.getId(),
                 doc.getFileName(),

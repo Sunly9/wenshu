@@ -1,0 +1,33 @@
+:root {
+  --ws-primary: #3b6ef5;
+  --ws-border: #e4e7ed;
+  --ws-text: #303133;
+  --ws-text-light: #909399;
+  --ws-bg: #f5f7fa;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  color: var(--ws-text);
+  background: var(--ws-bg);
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.app-main {
+  max-width: 1080px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 20px;
+}
