@@ -12,6 +12,7 @@ const props = defineProps<{
   docId: number | null
   page: number | null
   snippet: string
+  fileName?: string
 }>()
 
 const emit = defineEmits<{ (e: 'update:visible', v: boolean): void }>()
@@ -124,10 +125,13 @@ async function applyHighlight(
 <template>
   <el-dialog
     :model-value="visible"
-    title="原文位置"
+    :title="(fileName ? fileName.slice(0, 28) : '资料') + (page ? ` · 第 ${page} 页` : '')"
     width="820px"
     @update:model-value="emit('update:visible', $event)"
   >
+    <div class="pdf-explain">
+      这是资料的<b>原始 PDF 页面</b>，🟡 黄色高亮处就是这条答案依据在书里的位置——答案不是编的，出处在这里。
+    </div>
     <div v-loading="loading" class="pdf-wrap" :data-status="status">
       <div class="pdf-toolbar">
         <span v-if="status.startsWith('error')" class="status-tag">{{ status }}</span>
@@ -145,6 +149,15 @@ async function applyHighlight(
 </template>
 
 <style scoped>
+.pdf-explain {
+  background: var(--ws-yellow-soft);
+  border: 1px solid #eadfb8;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  line-height: 1.7;
+  margin-bottom: 10px;
+}
 .pdf-wrap {
   display: flex;
   flex-direction: column;

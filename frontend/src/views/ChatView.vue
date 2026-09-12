@@ -125,7 +125,7 @@ function onCitationClick(event: MouseEvent) {
   const citation = last?.citations.find((c) => c.n === n)
   if (citation) {
     if (citation.docId && citation.page) {
-      openSource(citation.docId, citation.page, citation.snippet)
+      openSource(citation.docId, citation.page, citation.snippet, citation.file)
     } else {
       dialogSnippet.value = citation
     }
@@ -137,12 +137,14 @@ const pdfView = ref(false)
 const pdfDocId = ref<number | null>(null)
 const pdfPage = ref<number | null>(null)
 const pdfSnippet = ref('')
+const pdfFileName = ref('')
 
-function openSource(docId: number | undefined | null, page: number | null, snippet: string) {
+function openSource(docId: number | undefined | null, page: number | null, snippet: string, fileName?: string) {
   if (docId && page) {
     pdfDocId.value = docId
     pdfPage.value = page
     pdfSnippet.value = snippet
+    pdfFileName.value = fileName ?? ''
     pdfView.value = true
   }
 }
@@ -294,7 +296,7 @@ function onKeyEnter(event: KeyboardEvent) {
           :key="item.chunkId"
           class="locate-card clickable"
           shadow="hover"
-          @click="openSource(item.documentId, item.page, item.content.slice(0, 60))"
+          @click="openSource(item.documentId, item.page, item.content.slice(0, 60), item.file)"
         >
           <div class="locate-src">
             {{ item.file }}<template v-if="item.page"> · 第{{ item.page }}页</template>
@@ -345,7 +347,7 @@ function onKeyEnter(event: KeyboardEvent) {
                 v-for="c in m.citations"
                 :key="c.n"
                 class="cite-item"
-                @click="c.docId && c.page ? openSource(c.docId, c.page, c.snippet) : (dialogSnippet = c)"
+                @click="c.docId && c.page ? openSource(c.docId, c.page, c.snippet, c.file) : (dialogSnippet = c)"
               >
                 <span class="cite-n">[{{ c.n }}]</span>
                 <span class="cite-src">
@@ -393,7 +395,7 @@ function onKeyEnter(event: KeyboardEvent) {
       </template>
     </el-dialog>
 
-    <PdfViewDialog v-model:visible="pdfView" :doc-id="pdfDocId" :page="pdfPage" :snippet="pdfSnippet" />
+    <PdfViewDialog v-model:visible="pdfView" :doc-id="pdfDocId" :page="pdfPage" :snippet="pdfSnippet" :file-name="pdfFileName" />
   </div>
 </template>
 
