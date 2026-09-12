@@ -10,6 +10,7 @@ services:
       - "5432:5432"
     volumes:
       - wenshu_pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U wenshu -d wenshu"]
       interval: 5s
@@ -21,6 +22,7 @@ services:
     container_name: wenshu-redis
     ports:
       - "16379:6379"   # 宿主机 6379 被本机 redis-server.exe 占用，开发环境映射到 16379
+    restart: unless-stopped
 
 volumes:
   wenshu_pgdata:

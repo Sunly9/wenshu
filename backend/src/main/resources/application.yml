@@ -25,6 +25,9 @@ spring:
 server:
   port: 8080
 
+wenshu:
+  storage-dir: ./data/uploads   # 上传文件落盘目录（data/ 已在 .gitignore）
+
 management:
   endpoint:
     health:
