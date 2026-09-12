@@ -5,9 +5,10 @@ import com.docmind.common.exception.ApiException;
 import com.docmind.generation.LlmClient;
 import com.docmind.generation.PromptBuilder;
 import com.docmind.observability.QueryLogService;
+import com.docmind.retrieve.RetrievalService;
 import com.docmind.retrieve.assembler.ContextAssembler;
+import com.docmind.retrieve.fusion.FusedChunk;
 import com.docmind.retrieve.recall.RetrievedChunk;
-import com.docmind.retrieve.recall.VectorRecall;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
@@ -32,21 +33,20 @@ public class ChatService {
     private static final Logger log = LoggerFactory.getLogger(ChatService.class);
 
     static final int DAILY_QUESTION_LIMIT = 50;   // 00 号文档 §6：单 IP 每日 50 次
-    static final int RECALL_TOP_K = 8;            // M1 简化：召回 8 直接组装；双路+RRF+Rerank 在 D10/D11
 
     private final KbService kbService;
-    private final VectorRecall vectorRecall;
+    private final RetrievalService retrievalService;
     private final ContextAssembler assembler;
     private final PromptBuilder promptBuilder;
     private final LlmClient llmClient;
     private final QueryLogService queryLogService;
     private final com.docmind.common.ratelimit.RateLimiter rateLimiter;
 
-    public ChatService(KbService kbService, VectorRecall vectorRecall, ContextAssembler assembler,
+    public ChatService(KbService kbService, RetrievalService retrievalService, ContextAssembler assembler,
                        PromptBuilder promptBuilder, LlmClient llmClient, QueryLogService queryLogService,
                        com.docmind.common.ratelimit.RateLimiter rateLimiter) {
         this.kbService = kbService;
-        this.vectorRecall = vectorRecall;
+        this.retrievalService = retrievalService;
         this.assembler = assembler;
         this.promptBuilder = promptBuilder;
         this.llmClient = llmClient;
@@ -62,8 +62,8 @@ public class ChatService {
         kbService.requireAccessible(req.kbId(), visitorId);
 
         long start = System.currentTimeMillis();
-        List<RetrievedChunk> recalled = vectorRecall.recall(req.kbId(), req.question(), RECALL_TOP_K);
-        List<RetrievedChunk> chosen = assembler.select(recalled);
+        RetrievalService.RetrievalResult retrieval = retrievalService.recall(req.kbId(), req.question());
+        List<FusedChunk> chosen = assembler.select(retrieval.fused());
 
         SseEmitter emitter = new SseEmitter(120_000L);
         // 客户端断开/超时后不再发送，但订阅继续跑完以便 query_log 落完整数据
@@ -86,7 +86,7 @@ public class ChatService {
         // 引用先于回答发送：前端可立即渲染"答案依据"列表
         List<Map<String, Object>> citations = new ArrayList<>();
         for (int i = 0; i < chosen.size(); i++) {
-            RetrievedChunk c = chosen.get(i);
+            RetrievedChunk c = chosen.get(i).chunk();
             Map<String, Object> m = new HashMap<>();
             m.put("n", i + 1);
             m.put("chunkId", c.chunkId());
@@ -101,7 +101,8 @@ public class ChatService {
         StringBuilder answer = new StringBuilder();
         AtomicInteger promptTokens = new AtomicInteger();
         AtomicInteger completionTokens = new AtomicInteger();
-        String userPrompt = promptBuilder.buildUserPrompt(req.question(), chosen);
+        String userPrompt = promptBuilder.buildUserPrompt(req.question(),
+                chosen.stream().map(FusedChunk::chunk).toList());
 
         llmClient.stream(PromptBuilder.SYSTEM_PROMPT, userPrompt).subscribe(
                 chunk -> {
@@ -121,8 +122,8 @@ public class ChatService {
                     long latency = System.currentTimeMillis() - start;
                     long queryId = queryLogService.save(
                             req.kbId(), visitorId, req.question(),
-                            retrievedDetail(recalled),
-                            chosen.stream().map(RetrievedChunk::chunkId).toList(),
+                            retrievedDetail(retrieval),
+                            chosen.stream().map(f -> f.chunk().chunkId()).toList(),
                             answer.toString(), latency,
                             promptTokens.get(), completionTokens.get());
                     safeSend.accept("done", Map.of(
@@ -134,16 +135,24 @@ public class ChatService {
         return emitter;
     }
 
-    /** retrieved JSONB 结构：[{chunkId, vectorScore}]，RRF/Rerank 分数在 D10/D11 追加 */
-    private List<Map<String, Object>> retrievedDetail(List<RetrievedChunk> recalled) {
+    /** retrieved JSONB 结构：[{chunkId, vectorScore, ftsScore, rrfScore, vectorRank, ftsRank}]，rerankScore D11 追加 */
+    private List<Map<String, Object>> retrievedDetail(RetrievalService.RetrievalResult retrieval) {
         List<Map<String, Object>> detail = new ArrayList<>();
-        for (RetrievedChunk c : recalled) {
+        for (FusedChunk f : retrieval.fused()) {
             Map<String, Object> m = new HashMap<>();
-            m.put("chunkId", c.chunkId());
-            m.put("vectorScore", Math.round(c.vectorScore() * 10000) / 10000.0);
+            m.put("chunkId", f.chunk().chunkId());
+            if (f.vectorScore() != null) m.put("vectorScore", round4(f.vectorScore()));
+            if (f.ftsScore() != null) m.put("ftsScore", round4(f.ftsScore()));
+            m.put("rrfScore", round4(f.rrfScore()));
+            if (f.vectorRank() != null) m.put("vectorRank", f.vectorRank());
+            if (f.ftsRank() != null) m.put("ftsRank", f.ftsRank());
             detail.add(m);
         }
         return detail;
+    }
+
+    private double round4(double v) {
+        return Math.round(v * 10000) / 10000.0;
     }
 
     private String snippet(String content, int max) {

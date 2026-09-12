@@ -1,24 +1,24 @@
 package com.docmind.retrieve.assembler;
 
-import com.docmind.retrieve.recall.RetrievedChunk;
+import com.docmind.retrieve.fusion.FusedChunk;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
 
-/** 上下文组装：按召回顺序装入预算（M1 简化版：≤3000 token；父块合并/去重在 D8/D11） */
+/** 上下文组装：融合序装入预算 ≤3000 token（父块合并去重在 D11 接入） */
 @Component
 public class ContextAssembler {
 
     static final int CONTEXT_TOKEN_BUDGET = 3000;
 
-    public List<RetrievedChunk> select(List<RetrievedChunk> recalled) {
-        List<RetrievedChunk> chosen = new ArrayList<>();
+    public List<FusedChunk> select(List<FusedChunk> candidates) {
+        List<FusedChunk> chosen = new ArrayList<>();
         int tokens = 0;
-        for (RetrievedChunk chunk : recalled) {
-            if (tokens + chunk.tokenCount() > CONTEXT_TOKEN_BUDGET) continue;
-            chosen.add(chunk);
-            tokens += chunk.tokenCount();
+        for (FusedChunk candidate : candidates) {
+            if (tokens + candidate.chunk().tokenCount() > CONTEXT_TOKEN_BUDGET) continue;
+            chosen.add(candidate);
+            tokens += candidate.chunk().tokenCount();
         }
         return chosen;
     }

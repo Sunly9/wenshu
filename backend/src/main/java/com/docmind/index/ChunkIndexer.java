@@ -17,9 +17,11 @@ import java.util.List;
 public class ChunkIndexer {
 
     private final JdbcTemplate jdbc;
+    private final ChineseTokenizer chineseTokenizer;
 
-    public ChunkIndexer(JdbcTemplate jdbc) {
+    public ChunkIndexer(JdbcTemplate jdbc, ChineseTokenizer chineseTokenizer) {
         this.jdbc = jdbc;
+        this.chineseTokenizer = chineseTokenizer;
     }
 
     public void deleteByDocument(long documentId) {
@@ -58,18 +60,20 @@ public class ChunkIndexer {
             parentIds[i] = keys.getKey() == null ? -1 : keys.getKey().longValue();
         }
 
-        // 子块：批量，带向量与 parent_id
+        // 子块：批量，带向量、全文索引（jieba 分词 → to_tsvector）与 parent_id
         List<Object[]> args = new ArrayList<>(children.size());
         for (int i = 0; i < children.size(); i++) {
             ChunkDraft child = children.get(i);
             Long parentId = child.parentIndex() == null ? null
                     : (child.parentIndex() < parentIds.length ? parentIds[child.parentIndex()] : null);
             args.add(new Object[]{documentId, parentId, strategy, child.content(), child.tokenCount(),
-                    child.sectionPath(), child.pageNo(), parents.size() + i, toVectorLiteral(childVectors[i])});
+                    child.sectionPath(), child.pageNo(), parents.size() + i,
+                    toVectorLiteral(childVectors[i]),
+                    chineseTokenizer.segment(child.content())});
         }
         jdbc.batchUpdate("""
-                INSERT INTO chunk(document_id, parent_id, strategy, content, token_count, section_path, page_no, chunk_index, embedding)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::vector)
+                INSERT INTO chunk(document_id, parent_id, strategy, content, token_count, section_path, page_no, chunk_index, embedding, content_tsv)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::vector, to_tsvector('simple', ?))
                 """, args);
     }
 

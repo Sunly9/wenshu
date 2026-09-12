@@ -86,6 +86,12 @@
       <artifactId>poi-ooxml</artifactId>
       <version>5.3.0</version>
     </dependency>
+    <!-- 中文分词：应用层生成 tsvector，避免依赖 zhparser 扩展（00 号文档 §5） -->
+    <dependency>
+      <groupId>com.huaban</groupId>
+      <artifactId>jieba-analysis</artifactId>
+      <version>1.0.2</version>
+    </dependency>
 
     <!-- 本地推理：ONNX Runtime(CPU)。分词器为纯 Java 自研 WordPiece（见 index/BertTokenizer） -->
     <dependency>
