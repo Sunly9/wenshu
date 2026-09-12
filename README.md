@@ -20,6 +20,41 @@ Spring Boot 3 (JDK 21) · PostgreSQL 17 + pgvector · Redis · Vue 3 + Vite + TS
 - [技术定稿 v1.0](docs/00-项目定稿-v1.0.md)（冻结规格：DDL / 参数 / API / 评测方案）
 - [总体设计与开发计划](docs/03-总体设计与开发计划.md)
 
+## 本地运行
+
+前置：JDK 21、Docker、Node 18+。
+
+```bash
+# 1. 数据库（PostgreSQL17+pgvector / Redis，宿主机 6379 被占则自动映射 16379）
+docker compose -f deploy/docker-compose.dev.yml up -d
+
+# 2. 嵌入模型（约 95MB，国内走 hf-mirror 镜像）
+mkdir -p backend/models/bge-small-zh-v1.5
+curl -L -o backend/models/bge-small-zh-v1.5/model.onnx \
+  https://hf-mirror.com/Xenova/bge-small-zh-v1.5/resolve/main/onnx/model.onnx
+curl -L -o backend/models/bge-small-zh-v1.5/tokenizer.json \
+  https://hf-mirror.com/Xenova/bge-small-zh-v1.5/resolve/main/tokenizer.json
+
+# 3. DeepSeek API Key（环境变量，不要写进任何文件）
+#    Windows: setx DEEPSEEK_API_KEY sk-xxx （新开终端生效）
+
+# 4. 后端（首次启动 Flyway 自动建表）
+cd backend && mvn spring-boot:run
+
+# 5. 前端
+cd frontend && npm install && npm run dev
+# 打开 http://localhost:5173
+```
+
+> 分词器为纯 Java 自研 WordPiece 实现（见 `backend/.../index/BertTokenizer.java`），
+> 不依赖任何原生库——DJL 的 Rust 分词库在真实语料上会 panic 杀进程，排障记录见 D4 提交。
+
 ## 状态
 
-开发中（三周排期，见设计文档第九节）。
+**M1 已达成（tag v0.1）**：上传教材 PDF → 浏览器提问 → 流式答案带页码引用 → 点角标看原文片段。
+
+- [x] 离线链路：解析(PDF/Markdown) → 分片(递归分隔符) → CPU 向量化(ONNX) → 入库(pgvector)
+- [x] 在线链路：向量召回 → DeepSeek 流式生成 → SSE(引用/答案/统计) → query_log
+- [x] 前端四页面：资料库列表(口令加入) / 资料管理(进度轮询+共享面板) / 对话 / 口令直达
+- [ ] M2：结构感知分块、表格整块保留、双路召回+RRF、Rerank、检索调试台
+- [ ] M3：出题判分、评测与消融实验、公网部署

@@ -56,7 +56,7 @@ public class DocumentService {
         if (documentRepo.countByKbId(kbId) >= MAX_DOCS_PER_KB) {
             throw new ApiException("该资料库已达 100 份文档上限，请先删除部分资料");
         }
-        String originalName = file.getOriginalFilename() == null ? "" : file.getOriginalFilename();
+        String originalName = basename(file.getOriginalFilename());
         String ext = extensionOf(originalName);
         if (!ALLOWED_TYPES.contains(ext)) {
             throw new ApiException("仅支持 PDF / Word(.docx) / Markdown 文件，不支持 ." + ext);
@@ -121,6 +121,14 @@ public class DocumentService {
             case INDEXING -> Math.max(80, progress.get(doc.getId()));
             case READY, FAILED -> 100;
         };
+    }
+
+    /** 防御：部分客户端上传的文件名带完整路径，只取最后一段 */
+    private String basename(String name) {
+        if (name == null || name.isBlank()) return "";
+        String normalized = name.replace('\\', '/');
+        int slash = normalized.lastIndexOf('/');
+        return slash >= 0 ? normalized.substring(slash + 1) : normalized;
     }
 
     private String extensionOf(String fileName) {

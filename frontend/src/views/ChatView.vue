@@ -78,6 +78,9 @@ async function send() {
       assistant.meta = meta
       assistant.done = true
     },
+  }).catch(() => {
+    assistant.meta = { error: '连接中断（后端可能已重启），请刷新后重试' }
+    assistant.done = true
   })
   assistant.done = true
   streaming.value = false

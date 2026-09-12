@@ -2,6 +2,8 @@ package com.docmind.generation;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
@@ -18,6 +20,8 @@ import java.util.Map;
 @Component
 public class LlmClient {
 
+    private static final Logger log = LoggerFactory.getLogger(LlmClient.class);
+
     /** delta 为增量文本；prompt/completionTokens 只在最后一个 chunk 带 usage 时非空 */
     public record LlmChunk(String delta, Integer promptTokens, Integer completionTokens) {}
 
@@ -29,9 +33,17 @@ public class LlmClient {
                      @Value("${wenshu.llm.api-key}") String apiKey,
                      @Value("${wenshu.llm.model}") String model) {
         this.model = model;
+        if (apiKey == null || apiKey.isBlank()) {
+            log.warn("DEEPSEEK_API_KEY 未配置——问答接口将不可用（本地运行说明见 README）");
+        }
+        // 连接 10s / 首字节响应 90s：流式生成整体走 SseEmitter 的 120s 超时兜底
+        reactor.netty.http.client.HttpClient httpClient = reactor.netty.http.client.HttpClient.create()
+                .option(io.netty.channel.ChannelOption.CONNECT_TIMEOUT_MILLIS, 10_000)
+                .responseTimeout(java.time.Duration.ofSeconds(90));
         this.webClient = WebClient.builder()
                 .baseUrl(baseUrl)
-                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
+                .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(httpClient))
+                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + (apiKey == null ? "" : apiKey))
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .codecs(c -> c.defaultCodecs().maxInMemorySize(4 * 1024 * 1024))
                 .build();

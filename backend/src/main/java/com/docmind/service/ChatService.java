@@ -66,9 +66,19 @@ public class ChatService {
         List<RetrievedChunk> chosen = assembler.select(recalled);
 
         SseEmitter emitter = new SseEmitter(120_000L);
+        // 客户端断开/超时后不再发送，但订阅继续跑完以便 query_log 落完整数据
+        java.util.concurrent.atomic.AtomicBoolean dead = new java.util.concurrent.atomic.AtomicBoolean(false);
+        emitter.onTimeout(() -> dead.set(true));
+        emitter.onCompletion(() -> dead.set(true));
+        emitter.onError(e -> dead.set(true));
+        java.util.function.BiConsumer<String, Object> safeSend = (event, data) -> {
+            if (!dead.get()) {
+                send(emitter, event, data);
+            }
+        };
         if (chosen.isEmpty()) {
-            send(emitter, "token", Map.of("text", "当前资料库还没有可检索的内容，请先上传文档并等待解析完成。"));
-            send(emitter, "done", Map.of("queryId", -1, "latencyMs", 0));
+            safeSend.accept("token", Map.of("text", "当前资料库还没有可检索的内容，请先上传文档并等待解析完成。"));
+            safeSend.accept("done", Map.of("queryId", -1, "latencyMs", 0));
             emitter.complete();
             return emitter;
         }
@@ -86,7 +96,7 @@ public class ChatService {
             m.put("snippet", snippet(c.content(), 80));
             citations.add(m);
         }
-        send(emitter, "citation", Map.of("citations", citations));
+        safeSend.accept("citation", Map.of("citations", citations));
 
         StringBuilder answer = new StringBuilder();
         AtomicInteger promptTokens = new AtomicInteger();
@@ -97,14 +107,14 @@ public class ChatService {
                 chunk -> {
                     if (!chunk.delta().isEmpty()) {
                         answer.append(chunk.delta());
-                        send(emitter, "token", Map.of("text", chunk.delta()));
+                        safeSend.accept("token", Map.of("text", chunk.delta()));
                     }
                     if (chunk.promptTokens() != null) promptTokens.set(chunk.promptTokens());
                     if (chunk.completionTokens() != null) completionTokens.set(chunk.completionTokens());
                 },
                 error -> {
                     log.warn("生成失败：{}", error.getMessage());
-                    send(emitter, "done", Map.of("error", "生成服务暂时不可用，请稍后再试"));
+                    safeSend.accept("done", Map.of("error", "生成服务暂时不可用，请稍后再试"));
                     emitter.complete();
                 },
                 () -> {
@@ -115,7 +125,7 @@ public class ChatService {
                             chosen.stream().map(RetrievedChunk::chunkId).toList(),
                             answer.toString(), latency,
                             promptTokens.get(), completionTokens.get());
-                    send(emitter, "done", Map.of(
+                    safeSend.accept("done", Map.of(
                             "queryId", queryId, "latencyMs", latency,
                             "promptTokens", promptTokens.get(), "completionTokens", completionTokens.get()));
                     emitter.complete();
@@ -145,7 +155,12 @@ public class ChatService {
         try {
             emitter.send(SseEmitter.event().name(event).data(data, MediaType.APPLICATION_JSON));
         } catch (Exception e) {
-            emitter.completeWithError(e);
+            // 发送失败多为客户端已断开：completeWithError 可能再次抛错，静默即可
+            try {
+                emitter.completeWithError(e);
+            } catch (Exception ignored) {
+                // 已完成
+            }
         }
     }
 }
