@@ -110,8 +110,8 @@ public class IngestPipeline {
         documentRepo.save(doc);
         progress.update(doc.getId(), 50);
 
-        Chunker chunker = chunkerFor(doc.getKbId());
-        ChunkResult result = chunker.chunk(parsed);
+        ChunkerChoice choice = chunkerFor(doc.getKbId());
+        ChunkResult result = choice.chunker().chunk(parsed);
         if (result.children().isEmpty()) {
             throw new IllegalStateException("解析成功但未产生任何分块（文档可能是空的或全是图片）");
         }
@@ -123,24 +123,30 @@ public class IngestPipeline {
         progress.update(doc.getId(), 90);
 
         chunkIndexer.deleteByDocument(doc.getId());
-        chunkIndexer.insertChunks(doc.getId(), result, vectors);
+        chunkIndexer.insertChunks(doc.getId(), result, vectors, choice.strategy());
 
         doc.setTokenCount(result.children().stream().mapToInt(ChunkDraft::tokenCount).sum());
         documentRepo.save(doc);
         log.info("文档 {} 入库完成：父块 {} / 子块 {} / {} token / 策略 {}",
                 doc.getId(), result.parents().size(), result.children().size(), doc.getTokenCount(),
-                chunker.getClass().getSimpleName());
+                choice.strategy());
         return result.children().size();
     }
 
-    private Chunker chunkerFor(Long kbId) {
-        String strategy = kbRepo.findById(kbId).map(KnowledgeBase::getChunkStrategy).orElse("STRUCTURE_AWARE");
+    private record ChunkerChoice(Chunker chunker, String strategy) {}
+
+    private ChunkerChoice chunkerFor(Long kbId) {
+        String strategy = kbRepo.findById(kbId).map(KnowledgeBase::getChunkStrategy)
+                .orElse("STRUCTURE_AWARE");
         return switch (strategy) {
-            case "FIXED" -> chunkers.stream().filter(c -> c instanceof FixedSizeChunker).findFirst().orElseThrow();
-            case "RECURSIVE" -> chunkers.stream().filter(c -> c instanceof RecursiveChunker).findFirst().orElseThrow();
+            case "FIXED" -> pick(FixedSizeChunker.class, strategy);
+            case "RECURSIVE" -> pick(RecursiveChunker.class, strategy);
             // SEMANTIC 计划 D9 接入，暂与默认一致
-            default -> chunkers.stream()
-                    .filter(c -> c instanceof StructureAwareChunker).findFirst().orElseThrow();
+            default -> pick(StructureAwareChunker.class, "STRUCTURE_AWARE");
         };
+    }
+
+    private ChunkerChoice pick(Class<? extends Chunker> type, String strategy) {
+        return new ChunkerChoice(chunkers.stream().filter(type::isInstance).findFirst().orElseThrow(), strategy);
     }
 }

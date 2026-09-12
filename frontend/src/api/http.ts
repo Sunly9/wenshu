@@ -34,4 +34,35 @@ export const kbApi = {
       .then((r) => r.data)
   },
   docStatus: (docId: number) => http.get<DocStatus>(`/documents/${docId}/status`).then((r) => r.data),
+  previewChunks: (id: number, strategy: string, file: File) => {
+    const form = new FormData()
+    form.append('strategy', strategy)
+    form.append('file', file)
+    return http
+      .post<ChunkPreviewResponse>(`/kb/${id}/chunks/preview`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      .then((r) => r.data)
+  },
+}
+
+export interface ChunkPreviewResponse {
+  strategy: string
+  pageCount: number
+  parentCount: number
+  childCount: number
+  totalChildTokens: number
+  truncated: boolean
+  blocks: PreviewBlock[]
+}
+
+export interface PreviewBlock {
+  kind: 'parent' | 'child'
+  index: number
+  parentIndex: number | null
+  tokenCount: number
+  sectionPath: string | null
+  pageNo: number | null
+  table: boolean
+  content: string
 }

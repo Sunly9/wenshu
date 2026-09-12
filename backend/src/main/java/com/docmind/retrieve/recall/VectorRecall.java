@@ -27,7 +27,9 @@ public class VectorRecall {
                        1 - (c.embedding <=> ?::vector) AS score
                 FROM chunk c
                 JOIN document d ON d.id = c.document_id
+                JOIN knowledge_base kb ON kb.id = d.kb_id
                 WHERE d.kb_id = ? AND d.status = 'READY' AND c.embedding IS NOT NULL
+                  AND c.strategy = kb.chunk_strategy
                 ORDER BY c.embedding <=> ?::vector
                 LIMIT ?
                 """,

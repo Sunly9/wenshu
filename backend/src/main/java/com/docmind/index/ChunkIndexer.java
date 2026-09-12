@@ -26,7 +26,7 @@ public class ChunkIndexer {
         jdbc.update("DELETE FROM chunk WHERE document_id = ?", documentId);
     }
 
-    public void insertChunks(long documentId, ChunkResult result, float[][] childVectors) {
+    public void insertChunks(long documentId, ChunkResult result, float[][] childVectors, String strategy) {
         List<ChunkDraft> parents = result.parents();
         List<ChunkDraft> children = result.children();
         if (children.size() != childVectors.length) {
@@ -40,18 +40,19 @@ public class ChunkIndexer {
             final int parentIndex = i;
             KeyHolder keys = new GeneratedKeyHolder();
             String sql = """
-                    INSERT INTO chunk(document_id, parent_id, content, token_count, section_path, page_no, chunk_index)
-                    VALUES (?, NULL, ?, ?, ?, ?, ?)
+                    INSERT INTO chunk(document_id, parent_id, strategy, content, token_count, section_path, page_no, chunk_index)
+                    VALUES (?, NULL, ?, ?, ?, ?, ?, ?)
                     """;
             jdbc.update(con -> {
                 PreparedStatement ps = con.prepareStatement(sql, new String[]{"id"});
                 ps.setLong(1, documentId);
-                ps.setString(2, parent.content());
-                ps.setInt(3, parent.tokenCount());
-                ps.setString(4, parent.sectionPath());
-                if (parent.pageNo() != null) ps.setInt(5, parent.pageNo());
-                else ps.setNull(5, Types.INTEGER);
-                ps.setInt(6, parentIndex);
+                ps.setString(2, strategy);
+                ps.setString(3, parent.content());
+                ps.setInt(4, parent.tokenCount());
+                ps.setString(5, parent.sectionPath());
+                if (parent.pageNo() != null) ps.setInt(6, parent.pageNo());
+                else ps.setNull(6, Types.INTEGER);
+                ps.setInt(7, parentIndex);
                 return ps;
             }, keys);
             parentIds[i] = keys.getKey() == null ? -1 : keys.getKey().longValue();
@@ -63,12 +64,12 @@ public class ChunkIndexer {
             ChunkDraft child = children.get(i);
             Long parentId = child.parentIndex() == null ? null
                     : (child.parentIndex() < parentIds.length ? parentIds[child.parentIndex()] : null);
-            args.add(new Object[]{documentId, parentId, child.content(), child.tokenCount(),
+            args.add(new Object[]{documentId, parentId, strategy, child.content(), child.tokenCount(),
                     child.sectionPath(), child.pageNo(), parents.size() + i, toVectorLiteral(childVectors[i])});
         }
         jdbc.batchUpdate("""
-                INSERT INTO chunk(document_id, parent_id, content, token_count, section_path, page_no, chunk_index, embedding)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?::vector)
+                INSERT INTO chunk(document_id, parent_id, strategy, content, token_count, section_path, page_no, chunk_index, embedding)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::vector)
                 """, args);
     }
 

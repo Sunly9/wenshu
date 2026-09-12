@@ -19,9 +19,15 @@ import org.springframework.web.multipart.MultipartFile;
 public class DocumentController {
 
     private final DocumentService documentService;
+    private final com.docmind.service.KbService kbService;
+    private final com.docmind.service.ChunkPreviewService previewService;
 
-    public DocumentController(DocumentService documentService) {
+    public DocumentController(DocumentService documentService,
+                              com.docmind.service.KbService kbService,
+                              com.docmind.service.ChunkPreviewService previewService) {
         this.documentService = documentService;
+        this.kbService = kbService;
+        this.previewService = previewService;
     }
 
     @PostMapping("/api/kb/{kbId}/documents")
@@ -39,6 +45,19 @@ public class DocumentController {
                                                        @NotBlank(message = "缺少访客标识")
                                                        @Size(max = 64) String visitorId) {
         return documentService.listByKb(kbId, visitorId);
+    }
+
+    /** 分片预览：传策略与文件，不入库，直接返回切分结果（00 号文档 §7） */
+    @PostMapping("/api/kb/{kbId}/chunks/preview")
+    public com.docmind.api.dto.ChunkPreviewResponse previewChunks(
+            @PathVariable Long kbId,
+            @RequestHeader("X-Visitor-Id")
+            @NotBlank(message = "缺少访客标识")
+            @Size(max = 64) String visitorId,
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file,
+            @RequestParam(value = "strategy", defaultValue = "STRUCTURE_AWARE") String strategy) {
+        kbService.requireAccessible(kbId, visitorId);
+        return previewService.preview(strategy, file);
     }
 
     @GetMapping("/api/documents/{id}/status")

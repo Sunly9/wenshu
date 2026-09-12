@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, ChatDotRound, CopyDocument, RefreshLeft } from '@element-plus/icons-vue'
 import { errMsg, kbApi } from '../api/http'
+import type { ChunkPreviewResponse, PreviewBlock } from '../api/http'
 import type { DocStatus, KbInfo } from '../api/types'
 
 const route = useRoute()
@@ -81,6 +82,34 @@ function statusText(s: DocStatus['status']) {
   return { PENDING: '排队中', PARSING: '解析中', INDEXING: '建立索引', READY: '就绪', FAILED: '失败' }[s]
 }
 
+// ---------- 分片预览 ----------
+const previewStrategy = ref('STRUCTURE_AWARE')
+const previewResult = ref<ChunkPreviewResponse | null>(null)
+const previewFile = ref<File | null>(null)
+const previewing = ref(false)
+const selectedBlock = ref<PreviewBlock | null>(null)
+
+function onPreviewFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  previewFile.value = input.files && input.files.length > 0 ? input.files[0] : null
+}
+
+async function runPreview() {
+  if (!previewFile.value) {
+    ElMessage.warning('请先选择要预览的文件')
+    return
+  }
+  previewing.value = true
+  selectedBlock.value = null
+  try {
+    previewResult.value = await kbApi.previewChunks(kbId, previewStrategy.value, previewFile.value)
+  } catch (e) {
+    ElMessage.error(errMsg(e))
+  } finally {
+    previewing.value = false
+  }
+}
+
 onMounted(() => {
   void load()
   timer = window.setInterval(() => {
@@ -115,6 +144,63 @@ onUnmounted(() => window.clearInterval(timer))
           <el-button text size="small" :icon="RefreshLeft" @click="resetCode">重置</el-button>
         </template>
         <span v-else class="share-tip">此库由同学创建，你已通过口令加入</span>
+      </div>
+    </el-card>
+
+    <el-card class="upload-card">
+      <template #header>
+        <span class="card-title">分片预览</span>
+        <span class="card-sub">上传前先看看文档会被切成什么样——切得不合理换策略重切（不入库）</span>
+      </template>
+      <div class="preview-controls">
+        <el-select v-model="previewStrategy" style="width: 220px">
+          <el-option label="结构感知（推荐·标题/表格/父子分块）" value="STRUCTURE_AWARE" />
+          <el-option label="递归分隔符（按段落/句子切）" value="RECURSIVE" />
+          <el-option label="固定长度（基线·硬切）" value="FIXED" />
+        </el-select>
+        <label class="preview-file">
+          <input type="file" accept=".pdf,.docx,.md,.markdown" hidden @change="onPreviewFileChange" />
+          {{ previewFile ? previewFile.name : '选择文件' }}
+        </label>
+        <el-button type="primary" :loading="previewing" @click="runPreview">预览切分</el-button>
+      </div>
+      <div v-if="previewResult" class="preview-body">
+        <div class="preview-summary">
+          策略 {{ previewResult.strategy }} · {{ previewResult.pageCount }} 页 ·
+          父块 {{ previewResult.parentCount }} / 子块 {{ previewResult.childCount }} ·
+          共 {{ previewResult.totalChildTokens }} token
+          <span v-if="previewResult.truncated" class="warn">（仅展示前 {{ previewResult.blocks.length }} 块）</span>
+        </div>
+        <div class="preview-panes">
+          <div class="block-list">
+            <div
+              v-for="b in previewResult.blocks"
+              :key="b.kind + b.index"
+              class="block-item"
+              :class="{ active: selectedBlock === b }"
+              @click="selectedBlock = b"
+            >
+              <el-tag size="small" :type="b.kind === 'parent' ? 'warning' : 'success'">
+                {{ b.kind === 'parent' ? '父' : '子' }}{{ b.index }}
+              </el-tag>
+              <span class="block-tok">{{ b.tokenCount }}t</span>
+              <span class="block-section">{{ b.table ? '[表格] ' : '' }}{{ b.sectionPath || '—' }}</span>
+            </div>
+          </div>
+          <div class="block-detail">
+            <template v-if="selectedBlock">
+              <div class="detail-meta">
+                {{ selectedBlock.kind === 'parent' ? '父块' : '子块' }}{{ selectedBlock.index }}
+                <template v-if="selectedBlock.parentIndex !== null"> · 挂父块{{ selectedBlock.parentIndex }}</template>
+                · {{ selectedBlock.tokenCount }} token
+                <template v-if="selectedBlock.pageNo"> · 第{{ selectedBlock.pageNo }}页</template>
+                <template v-if="selectedBlock.sectionPath"> · {{ selectedBlock.sectionPath }}</template>
+              </div>
+              <pre class="detail-content">{{ selectedBlock.content }}</pre>
+            </template>
+            <el-empty v-else description="点击左侧块查看内容" :image-size="60" />
+          </div>
+        </div>
       </div>
     </el-card>
 
@@ -190,5 +276,102 @@ onUnmounted(() => window.clearInterval(timer))
 .err {
   color: #f56c6c;
   font-size: 12px;
+}
+.card-title {
+  font-weight: 600;
+}
+.card-sub {
+  margin-left: 10px;
+  font-size: 12px;
+  color: var(--ws-text-light);
+}
+.preview-controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.preview-file {
+  border: 1px solid var(--ws-border);
+  border-radius: 4px;
+  padding: 6px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--ws-text-light);
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.preview-file:hover {
+  border-color: var(--ws-primary);
+  color: var(--ws-primary);
+}
+.preview-body {
+  margin-top: 14px;
+}
+.preview-summary {
+  font-size: 13px;
+  color: var(--ws-text-light);
+  margin-bottom: 8px;
+}
+.warn {
+  color: #e6a23c;
+}
+.preview-panes {
+  display: flex;
+  gap: 12px;
+  border: 1px solid var(--ws-border);
+  border-radius: 6px;
+  height: 380px;
+}
+.block-list {
+  width: 340px;
+  border-right: 1px solid var(--ws-border);
+  overflow-y: auto;
+}
+.block-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--ws-border);
+  font-size: 12px;
+}
+.block-item:hover,
+.block-item.active {
+  background: #ecf5ff;
+}
+.block-tok {
+  color: var(--ws-text-light);
+  width: 44px;
+  text-align: right;
+}
+.block-section {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ws-text-light);
+}
+.block-detail {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+.detail-meta {
+  font-size: 12px;
+  color: var(--ws-text-light);
+  margin-bottom: 8px;
+}
+.detail-content {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.8;
+  background: var(--ws-bg);
+  padding: 10px;
+  border-radius: 4px;
 }
 </style>
