@@ -11,7 +11,7 @@ class PromptBuilderTest {
 
     @Test
     void 上下文带编号出处_问题在末尾() {
-        RetrievedChunk chunk = new RetrievedChunk(1, 1, "数据结构.pdf",
+        RetrievedChunk chunk = new RetrievedChunk(1, 1, null, "数据结构.pdf",
                 "第2章 线性表", 28, "线性表是 n 个数据元素的有限序列。", 30, 0.9);
         String prompt = new PromptBuilder().buildUserPrompt("什么是线性表？", List.of(chunk));
 

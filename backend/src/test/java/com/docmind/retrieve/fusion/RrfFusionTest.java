@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class RrfFusionTest {
 
     private RetrievedChunk chunk(long id) {
-        return new RetrievedChunk(id, 1, "f.pdf", "s", 1, "c", 100, 0.9);
+        return new RetrievedChunk(id, 1, null, "f.pdf", "s", 1, "c", 100, 0.9);
     }
 
     @Test

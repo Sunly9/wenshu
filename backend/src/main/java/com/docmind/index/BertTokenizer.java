@@ -61,6 +61,42 @@ public final class BertTokenizer {
             ids.add(vocab.getOrDefault(token, unkId));
         }
         ids.add(sepId);
+        return toArray(ids);
+    }
+
+    /**
+     * 句对编码（交叉编码器输入）：[CLS] query [SEP] passage [SEP]，
+     * typeIds 前 3 段为 0、passage 段为 1。截断优先保 passage 尾部？——保 query 完整，passage 截断。
+     */
+    public PairEncoding encodePair(String query, String passage, int maxLen) {
+        List<String> qTokens = tokenize(query);
+        List<String> pTokens = tokenize(passage);
+        int budget = maxLen - 3;  // cls + 2*sep
+        int qLen = Math.min(qTokens.size(), Math.max(budget / 2, 16));
+        int pLen = Math.min(pTokens.size(), budget - qLen);
+
+        List<Long> ids = new ArrayList<>();
+        List<Long> typeIds = new ArrayList<>();
+        ids.add(clsId);
+        typeIds.add(0L);
+        for (int i = 0; i < qLen; i++) {
+            ids.add(vocab.getOrDefault(qTokens.get(i), unkId));
+            typeIds.add(0L);
+        }
+        ids.add(sepId);
+        typeIds.add(0L);
+        for (int i = 0; i < pLen; i++) {
+            ids.add(vocab.getOrDefault(pTokens.get(i), unkId));
+            typeIds.add(1L);
+        }
+        ids.add(sepId);
+        typeIds.add(1L);
+        return new PairEncoding(toArray(ids), toArray(typeIds));
+    }
+
+    public record PairEncoding(long[] ids, long[] typeIds) {}
+
+    private static long[] toArray(List<Long> ids) {
         long[] result = new long[ids.size()];
         for (int i = 0; i < result.length; i++) result[i] = ids.get(i);
         return result;

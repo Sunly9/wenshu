@@ -23,7 +23,7 @@ public class VectorRecall {
         float[] queryVector = embeddingClient.embed(List.of(question))[0];
         String vec = ChunkIndexer.toVectorLiteral(queryVector);
         return jdbc.query("""
-                SELECT c.id, c.document_id, d.file_name, c.section_path, c.page_no, c.content, c.token_count,
+                SELECT c.id, c.document_id, c.parent_id, d.file_name, c.section_path, c.page_no, c.content, c.token_count,
                        1 - (c.embedding <=> ?::vector) AS score
                 FROM chunk c
                 JOIN document d ON d.id = c.document_id
@@ -36,6 +36,7 @@ public class VectorRecall {
                 (rs, i) -> new RetrievedChunk(
                         rs.getLong("id"),
                         rs.getLong("document_id"),
+                        (Long) rs.getObject("parent_id"),
                         rs.getString("file_name"),
                         rs.getString("section_path"),
                         rs.getObject("page_no") == null ? null : rs.getInt("page_no"),

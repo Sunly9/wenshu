@@ -33,6 +33,7 @@ public class ChatService {
     private static final Logger log = LoggerFactory.getLogger(ChatService.class);
 
     static final int DAILY_QUESTION_LIMIT = 50;   // 00 号文档 §6：单 IP 每日 50 次
+    static final double REFUSE_THRESHOLD = 0.35;  // 00 号文档 §6：rerank 最高分低于此值明确拒答
 
     private final KbService kbService;
     private final RetrievalService retrievalService;
@@ -63,7 +64,7 @@ public class ChatService {
 
         long start = System.currentTimeMillis();
         RetrievalService.RetrievalResult retrieval = retrievalService.recall(req.kbId(), req.question());
-        List<FusedChunk> chosen = assembler.select(retrieval.fused());
+        List<FusedChunk> top = retrieval.reranked();
 
         SseEmitter emitter = new SseEmitter(120_000L);
         // 客户端断开/超时后不再发送，但订阅继续跑完以便 query_log 落完整数据
@@ -76,17 +77,28 @@ public class ChatService {
                 send(emitter, event, data);
             }
         };
-        if (chosen.isEmpty()) {
-            safeSend.accept("token", Map.of("text", "当前资料库还没有可检索的内容，请先上传文档并等待解析完成。"));
-            safeSend.accept("done", Map.of("queryId", -1, "latencyMs", 0));
+
+        // 拒答阈值（00 号文档 §6）：精排最高分 < 0.35 视为资料中无依据，明确拒答不编造
+        if (top.isEmpty()
+                || (top.get(0).rerankScore() != null && top.get(0).rerankScore() < REFUSE_THRESHOLD)) {
+            String refuse = "文档中未找到依据。当前资料似乎没有覆盖这个问题——可以换个问法，"
+                    + "或确认相关资料是否已上传并解析完成。";
+            safeSend.accept("token", Map.of("text", refuse));
+            long latency = System.currentTimeMillis() - start;
+            long queryId = queryLogService.save(req.kbId(), visitorId, req.question(),
+                    retrievedDetail(retrieval), List.of(), refuse, latency, null, null);
+            safeSend.accept("done", Map.of("queryId", queryId, "latencyMs", latency, "refused", true));
             emitter.complete();
             return emitter;
         }
 
-        // 引用先于回答发送：前端可立即渲染"答案依据"列表
+        // Small-to-Big：检索单元是子块，返回给模型的是其父块（≤4 个 / ≤3000 token）
+        List<RetrievedChunk> contextBlocks = assembler.assembleContext(top);
+
+        // 引用先于回答发送：前端可立即渲染"答案依据"列表（引用=精选子块，上下文=其父块）
         List<Map<String, Object>> citations = new ArrayList<>();
-        for (int i = 0; i < chosen.size(); i++) {
-            RetrievedChunk c = chosen.get(i).chunk();
+        for (int i = 0; i < top.size(); i++) {
+            RetrievedChunk c = top.get(i).chunk();
             Map<String, Object> m = new HashMap<>();
             m.put("n", i + 1);
             m.put("chunkId", c.chunkId());
@@ -101,8 +113,7 @@ public class ChatService {
         StringBuilder answer = new StringBuilder();
         AtomicInteger promptTokens = new AtomicInteger();
         AtomicInteger completionTokens = new AtomicInteger();
-        String userPrompt = promptBuilder.buildUserPrompt(req.question(),
-                chosen.stream().map(FusedChunk::chunk).toList());
+        String userPrompt = promptBuilder.buildUserPrompt(req.question(), contextBlocks);
 
         llmClient.stream(PromptBuilder.SYSTEM_PROMPT, userPrompt).subscribe(
                 chunk -> {
@@ -123,14 +134,15 @@ public class ChatService {
                     long queryId = queryLogService.save(
                             req.kbId(), visitorId, req.question(),
                             retrievedDetail(retrieval),
-                            chosen.stream().map(f -> f.chunk().chunkId()).toList(),
+                            contextBlocks.stream().map(RetrievedChunk::chunkId).toList(),
                             answer.toString(), latency,
                             promptTokens.get(), completionTokens.get());
                     safeSend.accept("done", Map.of(
                             "queryId", queryId, "latencyMs", latency,
                             "promptTokens", promptTokens.get(), "completionTokens", completionTokens.get()));
                     emitter.complete();
-                    log.info("问答完成 kb={} 问题={} 引用={} 块 耗时={}ms", req.kbId(), req.question(), chosen.size(), latency);
+                    log.info("问答完成 kb={} 问题={} 引用{}子块/上下文{}父块 耗时={}ms",
+                            req.kbId(), req.question(), top.size(), contextBlocks.size(), latency);
                 });
         return emitter;
     }
@@ -144,6 +156,7 @@ public class ChatService {
             if (f.vectorScore() != null) m.put("vectorScore", round4(f.vectorScore()));
             if (f.ftsScore() != null) m.put("ftsScore", round4(f.ftsScore()));
             m.put("rrfScore", round4(f.rrfScore()));
+            if (f.rerankScore() != null) m.put("rerankScore", round4(f.rerankScore()));
             if (f.vectorRank() != null) m.put("vectorRank", f.vectorRank());
             if (f.ftsRank() != null) m.put("ftsRank", f.ftsRank());
             detail.add(m);

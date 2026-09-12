@@ -24,7 +24,7 @@ public class FtsRecall {
                 .distinct().toList());
         if (query.isBlank()) return List.of();
         return jdbc.query("""
-                SELECT c.id, c.document_id, d.file_name, c.section_path, c.page_no, c.content, c.token_count,
+                SELECT c.id, c.document_id, c.parent_id, d.file_name, c.section_path, c.page_no, c.content, c.token_count,
                        ts_rank_cd(c.content_tsv, q.query) AS score
                 FROM chunk c
                 JOIN document d ON d.id = c.document_id
@@ -40,6 +40,7 @@ public class FtsRecall {
                 (rs, i) -> new RetrievedChunk(
                         rs.getLong("id"),
                         rs.getLong("document_id"),
+                        (Long) rs.getObject("parent_id"),
                         rs.getString("file_name"),
                         rs.getString("section_path"),
                         rs.getObject("page_no") == null ? null : rs.getInt("page_no"),

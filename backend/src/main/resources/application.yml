@@ -29,6 +29,8 @@ wenshu:
   storage-dir: ./data/uploads   # 上传文件落盘目录（data/ 已在 .gitignore）
   embedding:
     model-dir: ./models/bge-small-zh-v1.5   # model.onnx + tokenizer.json（models/ 已在 .gitignore）
+  rerank:
+    model-dir: ./models/bge-reranker-base    # int8 量化版；换 fp32 只需替换 model.onnx
   llm:
     base-url: https://api.deepseek.com
     api-key: ${DEEPSEEK_API_KEY:}   # 从环境变量读取，绝不写入文件
