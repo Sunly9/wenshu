@@ -63,6 +63,16 @@ public class DocumentController {
                 .body(bytes);
     }
 
+    /** 原文阅读卡：按 chunkId 取该块全文 + 所属父块 + 前后相邻块（引用点击的落地页） */
+    @GetMapping("/api/chunks/{chunkId}")
+    public java.util.Map<String, Object> chunkContext(@PathVariable Long chunkId,
+                                                      @RequestHeader("X-Visitor-Id")
+                                                      @NotBlank(message = "缺少访客标识")
+                                                      @Size(max = 64) String visitorId) {
+        var row = documentService.chunkRow(chunkId, visitorId);
+        return row;
+    }
+
     /** 分片预览：传策略与文件，不入库，直接返回切分结果（00 号文档 §7） */
     @PostMapping("/api/kb/{kbId}/chunks/preview")
     public com.docmind.api.dto.ChunkPreviewResponse previewChunks(

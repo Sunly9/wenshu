@@ -5,7 +5,7 @@ import { ElMessage } from 'element-plus'
 import { chatStream } from '../api/sse'
 import { errMsg, kbApi, locateApi, quizApi, suggestApi, shortSection } from '../api/http'
 import { isDevMode } from '../api/visitor'
-import PdfViewDialog from '../components/PdfViewDialog.vue'
+import SourceViewDialog from '../components/SourceViewDialog.vue'
 import type { DocStatus, GradeItem, LocateItem, QuizQuestion } from '../api/http'
 import type { Citation, DoneMeta } from '../api/types'
 
@@ -124,28 +124,23 @@ function onCitationClick(event: MouseEvent) {
   const last = [...messages].reverse().find((m) => m.role === 'assistant') as AssistantMessage | undefined
   const citation = last?.citations.find((c) => c.n === n)
   if (citation) {
-    if (citation.docId && citation.page) {
-      openSource(citation.docId, citation.page, citation.snippet, citation.file)
+    if (citation.chunkId) {
+      sourceChunkId.value = citation.chunkId
+      sourceView.value = true
     } else {
       dialogSnippet.value = citation
     }
   }
 }
 
-// PDF 原文跳转：有 docId+页码则开 PDF 查看器并高亮，否则退回文本片段弹窗
-const pdfView = ref(false)
-const pdfDocId = ref<number | null>(null)
-const pdfPage = ref<number | null>(null)
-const pdfSnippet = ref('')
-const pdfFileName = ref('')
+// 原文阅读卡：点引用/定位结果 → 舒服地读到出处原文
+const sourceView = ref(false)
+const sourceChunkId = ref<number | null>(null)
 
-function openSource(docId: number | undefined | null, page: number | null, snippet: string, fileName?: string) {
-  if (docId && page) {
-    pdfDocId.value = docId
-    pdfPage.value = page
-    pdfSnippet.value = snippet
-    pdfFileName.value = fileName ?? ''
-    pdfView.value = true
+function openSource(chunkId: number | undefined | null) {
+  if (chunkId) {
+    sourceChunkId.value = chunkId
+    sourceView.value = true
   }
 }
 
@@ -296,7 +291,7 @@ function onKeyEnter(event: KeyboardEvent) {
           :key="item.chunkId"
           class="locate-card clickable"
           shadow="hover"
-          @click="openSource(item.documentId, item.page, item.content.slice(0, 60), item.file)"
+          @click="openSource(item.chunkId)"
         >
           <div class="locate-src">
             {{ item.file }}<template v-if="item.page"> · 第{{ item.page }}页</template>
@@ -347,7 +342,7 @@ function onKeyEnter(event: KeyboardEvent) {
                 v-for="c in m.citations"
                 :key="c.n"
                 class="cite-item"
-                @click="c.docId && c.page ? openSource(c.docId, c.page, c.snippet, c.file) : (dialogSnippet = c)"
+                @click="c.chunkId ? openSource(c.chunkId) : (dialogSnippet = c)"
               >
                 <span class="cite-n">[{{ c.n }}]</span>
                 <span class="cite-src">
@@ -395,7 +390,7 @@ function onKeyEnter(event: KeyboardEvent) {
       </template>
     </el-dialog>
 
-    <PdfViewDialog v-model:visible="pdfView" :doc-id="pdfDocId" :page="pdfPage" :snippet="pdfSnippet" :file-name="pdfFileName" />
+    <SourceViewDialog v-model:visible="sourceView" :chunk-id="sourceChunkId" />
   </div>
 </template>
 

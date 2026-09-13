@@ -33,16 +33,19 @@ public class DocumentService {
     private final IngestPipeline pipeline;
     private final IngestProgressStore progress;
     private final Path storageDir;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     public DocumentService(DocumentRepository documentRepo,
                            KbService kbService,
                            IngestPipeline pipeline,
                            IngestProgressStore progress,
+                           org.springframework.jdbc.core.JdbcTemplate jdbc,
                            @Value("${wenshu.storage-dir}") String storageDir) throws IOException {
         this.documentRepo = documentRepo;
         this.kbService = kbService;
         this.pipeline = pipeline;
         this.progress = progress;
+        this.jdbc = jdbc;
         this.storageDir = Path.of(storageDir).toAbsolutePath().normalize();
         Files.createDirectories(this.storageDir);
     }
@@ -130,6 +133,42 @@ public class DocumentService {
         kbService.requireAccessible(doc.getKbId(), visitorId);
         return storageDir.resolve("kb-" + doc.getKbId())
                 .resolve(doc.getId() + "." + doc.getFileType());
+    }
+
+    /** 原文阅读卡数据：块全文 + 父块 + 前后相邻子块（引用/定位点击的落地内容） */
+    public java.util.Map<String, Object> chunkRow(long chunkId, String visitorId) {
+        List<java.util.Map<String, Object>> rows = jdbc.queryForList("""
+                SELECT c.id, c.document_id, c.parent_id, c.content, c.section_path, c.page_no,
+                       c.chunk_index, d.file_name, d.kb_id
+                FROM chunk c JOIN document d ON d.id = c.document_id
+                WHERE c.id = ?
+                """, chunkId);
+        if (rows.isEmpty()) {
+            throw new NotFoundException("内容块不存在");
+        }
+        var row = rows.get(0);
+        kbService.requireAccessible(((Number) row.get("kb_id")).longValue(), visitorId);
+
+        java.util.Map<String, Object> result = new java.util.HashMap<>(row);
+        Object parentId = row.get("parent_id");
+        if (parentId != null) {
+            List<java.util.Map<String, Object>> parents = jdbc.queryForList(
+                    "SELECT content, page_no, section_path FROM chunk WHERE id = ?", ((Number) parentId).longValue());
+            if (!parents.isEmpty()) {
+                result.put("parentContent", parents.get(0).get("content"));
+            }
+        }
+        long documentId = ((Number) row.get("document_id")).longValue();
+        int idx = ((Number) row.get("chunk_index")).intValue();
+        List<java.util.Map<String, Object>> neighbors = jdbc.queryForList("""
+                SELECT chunk_index, content FROM chunk
+                WHERE document_id = ? AND parent_id IS NOT NULL AND chunk_index IN (?, ?)
+                """, documentId, idx - 1, idx + 1);
+        for (var n : neighbors) {
+            int nIdx = ((Number) n.get("chunk_index")).intValue();
+            result.put(nIdx < idx ? "prevContent" : "nextContent", n.get("content"));
+        }
+        return result;
     }
 
     /** 防御：部分客户端上传的文件名带完整路径，只取最后一段 */
