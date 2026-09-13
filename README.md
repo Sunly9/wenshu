@@ -33,19 +33,17 @@
 
 ## 📸 项目截图
 
-<!-- 截图占位：实际使用后拍摄放入 docs/screenshots/ 目录 -->
-
-| 问 · AI 回答带引用 | 查 · 原文定位 |
+| 首页 · 建库/口令加入 | 问 · AI 回答带引用 |
 |:---:|:---:|
-| ![问模式](docs/screenshots/chat.png) | ![查模式](docs/screenshots/locate.png) |
+| ![首页](docs/screenshots/home.png) | ![问模式](docs/screenshots/chat.png) |
 
-| 练 · 出题判分 | 原文阅读卡 |
+| 练 · 出题判分 + 漏句指出 | 原文阅读卡 · 出处展示 |
 |:---:|:---:|
 | ![练模式](docs/screenshots/quiz.png) | ![原文阅读](docs/screenshots/source.png) |
 
-| 检索调试台 | 消融实验面板 |
+| 查 · 原文定位 | 检索调试台 |
 |:---:|:---:|
-| ![调试台](docs/screenshots/debug.png) | ![消融实验](docs/screenshots/eval.png) |
+| ![查模式](docs/screenshots/locate.png) | ![调试台](docs/screenshots/debug.png) |
 
 ---
 
