@@ -7,6 +7,7 @@
 [![Spring Boot](https://img.shields.io/badge/Spring_Boot_3-JDK_21-6DB33F?logo=springboot)](https://spring.io)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL_17-pgvector-336791?logo=postgresql)](https://www.postgresql.org)
 [![Vue 3](https://img.shields.io/badge/Vue_3-TypeScript-4FC08D?logo=vuedotjs)](https://vuejs.org)
+[![ONNX](https://img.shields.io/badge/ONNX-CPU_Inference-812AEE)](https://onnxruntime.ai)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 把教材、讲义、真题丢进知识库，然后——**问它、查它、让它考你**。
@@ -15,48 +16,55 @@
 
 ---
 
-## 为什么做这个
+## ✨ 功能特性
 
-备考时你手上有几百页 PDF，但：
-
-| 痛点 | 问书的解法 |
+| 功能 | 说明 |
 |---|---|
-| 找一个知识点翻半天 PDF | 问一句，秒出答案 + 第几页 |
-| ChatGPT 不知道你教材写了什么，会编 | 只根据你上传的资料回答，**资料里没有就明确拒答** |
-| 想自测没题做 | 圈定章节自动出题，答完指出你漏了原文哪句 |
-
-**核心主张：知识库答不准，不是模型不行，是分片和检索没做好。** 本项目用消融实验证明了这一点。
+| 🧠 **问** — AI 回答带出处 | 流式回答 + `[n]` 角标，点击直达 PDF 原文段落，资料里没有的明确拒答 |
+| 🔍 **查** — 原文定位 | 丢半句记不全的话、一个术语，直接定位到原文段落（语义匹配，不是 Ctrl+F） |
+| 📝 **练** — 自动出题判分 | 圈定章节生成练习题，答完 LLM 判分，指出你漏了原文哪句 |
+| 📕 **错题本** | 交卷自动存档，跨练习收集做错的题，随时回顾 |
+| 🔗 **口令共享** | 同学输一次口令即可共用资料库，支持跨设备 |
+| 📊 **检索调试台** | 召回漏斗 + 四列得分（向量/关键词/RRF/Rerank）+ 耗时拆解，全程可视化 |
+| 🧪 **消融实验** | 6 配置 × 50 题，一键跑出对比表 |
+| 📄 **分片预览** | 上传前看文档被切成什么样，不好换策略重切 |
 
 ---
 
-## 核心特性
+## 📸 项目截图
 
-### 🔍 自研 RAG 检索链（不用 LangChain）
+<!-- 截图占位：实际使用后拍摄放入 docs/screenshots/ 目录 -->
 
-```
-问题 → 双路召回(向量50 + 关键词50) → RRF融合(30) → Rerank精排(8)
-     → 拒答判断(阈值0.35) → Small-to-Big父块组装 → DeepSeek流式生成
-```
+| 问 · AI 回答带引用 | 查 · 原文定位 |
+|:---:|:---:|
+| ![问模式](docs/screenshots/chat.png) | ![查模式](docs/screenshots/locate.png) |
 
-- **双路召回**：语义向量 + jieba 分词全文检索，互补覆盖口语化提问和精确术语
-- **RRF 融合**：无需调权的排名合并，两路都认可的块排最前
-- **交叉编码器精排**：bge-reranker 逐对打分，实测 MRR 从 0.765 提升至 **0.942**（+23%）
-- **拒答机制**：精排最高分 < 0.35 → 明确回答"文档中未找到依据"，不编造
+| 练 · 出题判分 | 原文阅读卡 |
+|:---:|:---:|
+| ![练模式](docs/screenshots/quiz.png) | ![原文阅读](docs/screenshots/source.png) |
 
-### 📊 消融实验（6 配置 × 50 题）
+| 检索调试台 | 消融实验面板 |
+|:---:|:---:|
+| ![调试台](docs/screenshots/debug.png) | ![消融实验](docs/screenshots/eval.png) |
 
-| 配置 | HitRate@5 | MRR |
-|---|---:|---:|
-| ① 固定长度 + 纯向量 | 93.0% | 0.748 |
-| ② 递归分隔符 + 纯向量 | 95.4% | 0.724 |
-| ③ 结构感知 + 纯向量 | 90.7% | 0.572 |
-| ④ ③ + 父子分块 | 95.4% | 0.729 |
-| ⑤ ④ + 双路召回 + RRF | 97.7% | 0.765 |
-| ⑥ ⑤ + Rerank 精排 | 97.7% | **0.942** |
+---
 
-> **核心发现**：Rerank 不提升召回率（HitRate 持平），但把 MRR 拉高 23%——**交叉编码器的价值在排序质量而非找得更多**。命中的块几乎全部被顶到第 1 名。
+## 📊 实验结果
 
-### ✅ 生成质量（LLM 裁判，43 题）
+### 消融实验（6 配置 × 50 题，教材语料）
+
+| 配置 | HitRate@5 | MRR | 说明 |
+|---|---:|---:|---|
+| ① 固定长度 + 纯向量 | 93.0% | 0.748 | 基线 |
+| ② 递归分隔符 + 纯向量 | 95.4% | 0.724 | 断在自然边界 |
+| ③ 结构感知 + 纯向量 | 90.7% | 0.572 | 口径更严 |
+| ④ ③ + 父子分块 | 95.4% | 0.729 | Small-to-Big |
+| ⑤ ④ + 双路召回 + RRF | 97.7% | 0.765 | 语义+关键词互补 |
+| ⑥ ⑤ + Rerank 精排 | 97.7% | **0.942** | **MRR +23%** |
+
+> **核心发现**：Rerank 不提升召回率（HitRate 持平），但把 MRR 从 0.765 拉到 0.942——交叉编码器的价值在**排序质量**而非找得更多。
+
+### 生成质量（LLM 裁判，43 题）
 
 | 指标 | 结果 |
 |---|---|
@@ -64,37 +72,9 @@
 | 引用准确率 | 71.9%（115/160 角标真正支撑结论） |
 | 正确拒答率 | 42.9%（库外问题不编造） |
 
-### 🛠 四种分片策略（可切换 + 可视化预览）
-
-| 策略 | 原理 | 定位 |
-|---|---|---|
-| 固定长度 | token 数硬切 | 消融基线 |
-| 递归分隔符 | `\n\n` → `\n` → `。` 层级断点 | 工程默认 |
-| **结构感知** | 标题栈 + 表格整块保留 + 父子分块 | **主策略** |
-| 语义分块 | 句向量相似度骤降处断句 | 对比项 |
-
-上传前可在前端**实时预览切分效果**，切得不好换策略重切。
-
-### 🖥 检索调试台
-
-把 RAG 黑盒打开——每次检索的完整过程可视化：
-
-- 召回漏斗（50+50 → 30 → 10 → 4）
-- 每条候选的**四列得分**（向量/关键词/RRF/Rerank）并排对比
-- 各阶段耗时拆解
-- 双策略并排切换对比
-
-### 📝 产品三件套
-
-| 模式 | 功能 |
-|---|---|
-| **问** | 流式回答 + `[n]` 角标 → 点击直达原文出处段落 |
-| **查** | 丢半句话/关键词 → 语义定位原文段落 |
-| **练** | 圈定章节自动出题 → LLM 判分 → 指出漏掉的原文句子 → **错题本**自动收集 |
-
 ---
 
-## 技术架构
+## 🏗 技术架构
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -128,9 +108,50 @@
 └───────────────┘    └───────────────┘
 ```
 
+### 检索链路（核心）
+
+```
+问题 → 向量召回(50) + 关键词召回(50)     双路互补
+     → RRF 融合(30)                     无需调权的排名合并
+     → Rerank 精排(10留8)               交叉编码器逐对打分
+     → 拒答判断(最高分<0.35?)           防止编造
+     → Small-to-Big 父块组装(≤4块)      子块检索，父块返回
+     → DeepSeek 流式生成                 SSE 推送
+```
+
 ---
 
-## 快速开始
+## 📦 技术栈
+
+**后端**：Spring Boot 3.x（JDK 21）、Spring Data JPA + JdbcTemplate、Flyway、WebFlux（SSE 流式）
+
+**前端**：Vue 3 + Composition API、Vite、TypeScript、Element Plus、Pinia
+
+**AI / ML**：
+| 组件 | 用途 | 运行方式 |
+|---|---|---|
+| bge-small-zh-v1.5 | 文本向量化（512维） | ONNX Runtime，CPU |
+| bge-reranker-base | 交叉编码器精排 | ONNX Runtime，CPU（int8量化） |
+| DeepSeek API | 流式文本生成 | REST API |
+| jieba | 中文分词 | Java 库 |
+
+**存储**：PostgreSQL 17 + pgvector（向量+全文+业务数据单库）、Redis（限流/缓存）
+
+---
+
+## 🔧 技术决策
+
+| 决策 | 选择 | 为什么不选替代方案 |
+|---|---|---|
+| 向量库 | PostgreSQL + pgvector | 20万块内同库同事务最简；Milvus 杀鸡用牛刀 |
+| RAG 框架 | **自研** | LangChain 默认分片不适配中文/表格；封装深无法做消融实验 |
+| 分词器 | **纯 Java 自研** | DJL Rust 库在真实语料上 panic 杀 JVM（见排障记录） |
+| 生成模型 | DeepSeek API | 中文效果好、便宜（全部实验花费 < ¥5） |
+| 部署 | Docker Compose | 单命令启动全部服务 |
+
+---
+
+## 🚀 快速开始
 
 ### 前置条件
 
@@ -146,7 +167,7 @@
 git clone https://github.com/Sunly9/wenshu.git
 cd wenshu
 
-# 2. 启动数据库（PostgreSQL + pgvector / Redis）
+# 2. 启动数据库
 docker compose -f deploy/docker-compose.dev.yml up -d
 
 # 3. 下载嵌入模型（约 95MB）
@@ -156,7 +177,7 @@ curl -L -o backend/models/bge-small-zh-v1.5/model.onnx \
 curl -L -o backend/models/bge-small-zh-v1.5/tokenizer.json \
   https://hf-mirror.com/Xenova/bge-small-zh-v1.5/resolve/main/tokenizer.json
 
-# 4. 下载重排模型（约 279MB，可选——不装则降级为纯 RRF）
+# 4. 下载重排模型（约 279MB，可选）
 mkdir -p backend/models/bge-reranker-base
 curl -L -o backend/models/bge-reranker-base/model.onnx \
   https://hf-mirror.com/Xenova/bge-reranker-base/resolve/main/onnx/model_quantized.onnx
@@ -177,19 +198,29 @@ cd frontend && npm install && npm run dev
 
 ---
 
-## 技术决策
+## 📡 主要接口
 
-| 决策 | 选择 | 为什么不选替代方案 |
+| 方法 | 路径 | 说明 |
 |---|---|---|
-| 向量库 | PostgreSQL + pgvector | 20 万块内向量+业务同库同事务最简。Milvus 是杀鸡用牛刀，Chroma 偏 demo |
-| RAG 框架 | **自研** | LangChain 默认分片不适配中文/表格；封装深无法自定义；自研才能做消融实验 |
-| 生成模型 | DeepSeek API | 中文效果好、价格低（本项目全部实验花费 < ¥5） |
-| 向量/重排 | bge + ONNX CPU | 不需要 GPU；"能不用 GPU 跑起来"是加分项 |
-| 分词器 | **纯 Java 自研** | DJL Rust 分词库在真实语料上 panic 杀 JVM（详见排障记录） |
+| POST | `/api/kb` | 创建资料库（自动生成口令） |
+| GET | `/api/kb` | 资料库列表（按访客过滤） |
+| POST | `/api/kb/join` | 通过口令加入资料库 |
+| POST | `/api/kb/{id}/documents` | 上传文档（异步解析） |
+| GET | `/api/documents/{id}/status` | 解析进度 |
+| POST | `/api/kb/{id}/chunks/preview` | 分片预览（不入库） |
+| POST | `/api/chat` | **提问**（SSE 流式） |
+| POST | `/api/kb/{id}/locate` | **查**：原文定位 |
+| POST | `/api/kb/{id}/quiz/generate` | **练**：生成练习题 |
+| POST | `/api/kb/{id}/quiz/grade` | 判分（含漏句指出） |
+| GET | `/api/kb/{id}/quiz/wrong` | 错题本 |
+| POST | `/api/kb/{id}/debug-query` | 调试台：检索链即时执行 |
+| POST | `/api/eval/run` | 消融实验跑批 |
+| GET | `/api/chunks/{id}` | 原文阅读卡 |
+| GET | `/api/kb/{id}/suggest-questions` | 示例问题（按库内容生成） |
 
 ---
 
-## 项目结构
+## 📁 项目结构
 
 ```
 wenshu/
@@ -198,75 +229,42 @@ wenshu/
 │       ├── api/                      # Controller / DTO / 全局异常
 │       ├── ingest/                   # 离线链路
 │       │   ├── parser/               # PdfParser / MarkdownParser / WordParser
-│       │   ├── chunker/              # 4 种分片策略 + 共享切分/打包组件
+│       │   ├── chunker/              # 4 种分片策略 + 共享组件
 │       │   └── pipeline/             # 编排 + 状态机 + 断电恢复
 │       ├── index/                    # 向量化 / 全文索引 / 自研分词器
 │       ├── retrieve/                 # 在线链路
 │       │   ├── recall/               # VectorRecall / FtsRecall
-│       │   ├── fusion/               # RrfFusion
-│       │   ├── rerank/               # OnnxRerankClient
+│       │   ├── fusion/               # RrfFusion (k=60)
+│       │   ├── rerank/               # OnnxRerankClient (交叉编码器)
 │       │   └── assembler/            # Small-to-Big 父块组装
 │       ├── generation/               # PromptBuilder / LlmClient / SSE
 │       ├── quiz/                     # 出题 / 判分 / 错题本
-│       ├── eval/                     # 评测Runner / 生成质量评测
+│       ├── eval/                     # 消融Runner / 生成质量评测
 │       └── observability/            # QueryLog / DebugService
 ├── frontend/                         # Vue 3 + Vite + TS + Element Plus
 │   └── src/views/                    # 4 个页面
-├── deploy/                           # Docker Compose / Nginx 配置
+├── deploy/                           # Docker Compose / Nginx
 ├── docs/                             # 设计文档（含冻结规格）
 │   ├── 00-项目定稿-v1.0.md           # DDL / API / 参数 / 评测方案
-│   └── 03-总体设计与开发计划.md       # 架构设计 + 21 天排期
+│   ├── 03-总体设计与开发计划.md       # 架构设计 + 21 天排期
+│   └── 用户手册.md                    # 产品定义
 └── .github/workflows/                # CI/CD（部署时启用）
 ```
 
 ---
 
-## 实验
+## 🔐 安全说明
 
-### 评测集
-
-50 道人工标注问题（真实教材语料）：
-
-| 题型 | 数量 | 考察 |
-|---|---|---|
-| 事实型 | 25 | 基本检索能力 |
-| 多跳型 | 10 | 跨章节知识关联 |
-| 表格型 | 8 | 表格是否被切碎 |
-| 无答案 | 7 | 拒答（不编造） |
-
-### 关键发现
-
-1. **Rerank 的价值在排序而非召回** — MRR +23%，HitRate 持平
-2. **相关性 ≠ 可答性** — 教材大篇幅讨论快速排序但不含其发明者，交叉编码器仍打高分（0.986）；简单阈值无法完美区分
-3. **双路召回互补** — 关键词路把向量排第 11 的块捞到融合第 3
-
-### 复现实验
-
-```bash
-# 打开调试台（http://localhost:5173/debug/1）
-# → "评测面板" Tab → "一键跑消融实验"
-# 或 API：
-curl -X POST http://localhost:8080/api/eval/run \
-  -H "Content-Type: application/json" \
-  -H "X-Visitor-Id: your-id" \
-  -d '{"kbId": 1}'
-```
+- `DEEPSEEK_API_KEY` 通过环境变量注入，**不入库不入 Git**
+- 匿名访客体系（无注册），localStorage UUID 标识身份，口令共享代替账号系统
+- 按 IP 限流（Redis）：提问 50 次/天，口令验证 10 次/小时
+- 上传限制：仅 PDF/Word/Markdown，单文件 ≤ 50MB，单库 ≤ 100 文档
 
 ---
 
-## 文档
+## 📝 License
 
-| 文档 | 内容 |
-|---|---|
-| [用户手册](docs/用户手册.md) | 产品定位、功能说明、使用指南 |
-| [技术定稿](docs/00-项目定稿-v1.0.md) | DDL、API 契约、参数冻结表、评测方案、变更记录 |
-| [总体设计](docs/03-总体设计与开发计划.md) | 架构图、模块设计、21 天排期 |
-
----
-
-## License
-
-[MIT](LICENSE)
+MIT © [Sunly9](https://github.com/Sunly9)
 
 ---
 
