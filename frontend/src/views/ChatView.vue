@@ -57,7 +57,7 @@ const mode = ref<'ask' | 'locate' | 'quiz'>('ask')
 const locateResults = ref<LocateItem[]>([])
 const locating = ref(false)
 
-// 练模式（出题判分）
+// 练模式（出题判分 + 错题本）
 const quizDocs = ref<DocStatus[]>([])
 const quizDocId = ref('')
 const quizSection = ref('')
@@ -65,6 +65,9 @@ const quizQuestions = ref<QuizQuestion[]>([])
 const quizAnswers = reactive<string[]>([])
 const quizGrades = ref<GradeItem[] | null>(null)
 const quizing = ref(false)
+const quizTab = ref<'practice' | 'wrong'>('practice')
+const wrongList = ref<Awaited<ReturnType<typeof quizApi.wrong>>>([])
+const wrongLoading = ref(false)
 
 async function loadQuizDocs() {
   if (quizDocs.value.length > 0) return
@@ -72,6 +75,30 @@ async function loadQuizDocs() {
     quizDocs.value = (await kbApi.documents(kbId)).filter((d) => d.status === 'READY')
   } catch {
     /* 静默 */
+  }
+}
+
+async function loadWrong() {
+  wrongLoading.value = true
+  try {
+    wrongList.value = await quizApi.wrong(kbId)
+  } catch {
+    /* 静默 */
+  } finally {
+    wrongLoading.value = false
+  }
+}
+
+function watchQuizTab() {
+  if (quizTab.value === 'wrong' && wrongList.value.length === 0) void loadWrong()
+}
+
+function parseOptions(raw: string | undefined): string[] {
+  if (!raw) return []
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return []
   }
 }
 
@@ -99,6 +126,10 @@ async function submitQuiz() {
   quizing.value = true
   try {
     quizGrades.value = await quizApi.grade(kbId, quizQuestions.value, [...quizAnswers])
+    // 交卷自动存档（错题本数据源）
+    if (quizGrades.value) {
+      quizApi.saveAttempt(kbId, quizQuestions.value, [...quizAnswers], quizGrades.value).catch(() => undefined)
+    }
   } catch (e) {
     ElMessage.error(errMsg(e))
   } finally {
@@ -225,8 +256,17 @@ function onKeyEnter(event: KeyboardEvent) {
       </el-radio-group>
     </div>
 
-    <!-- 练模式：出题与判分 -->
+    <!-- 练模式：出题与判分 + 错题本 -->
     <div v-if="mode === 'quiz'" class="quiz-wrap">
+      <div class="quiz-tabs">
+        <el-radio-group v-model="quizTab" size="small" @change="watchQuizTab">
+          <el-radio-button value="practice">做题</el-radio-button>
+          <el-radio-button value="wrong">错题本 ({{ wrongList.length || '' }})</el-radio-button>
+        </el-radio-group>
+      </div>
+
+      <!-- 做题 Tab -->
+      <div v-if="quizTab === 'practice'" class="quiz-inner">
       <div class="quiz-scope">
         <el-select v-model="quizDocId" placeholder="出题范围：整个资料库" clearable style="width: 260px">
           <el-option v-for="d in quizDocs" :key="d.documentId" :label="d.fileName" :value="String(d.documentId)" />
@@ -279,6 +319,31 @@ function onKeyEnter(event: KeyboardEvent) {
             总分 {{ quizGrades.reduce((a, g) => a + g.score, 0) / quizGrades.length }} / 100
           </span>
         </template>
+      </div>
+      </div>
+
+      <!-- 错题本 Tab -->
+      <div v-if="quizTab === 'wrong'" class="quiz-inner">
+        <div v-loading="wrongLoading" class="wrong-list">
+          <el-empty v-if="wrongList.length === 0 && !wrongLoading" description="还没有错题——做题后这里会自动收集你做错的题" />
+          <el-card v-for="(w, i) in wrongList" :key="i" class="wrong-card" shadow="never">
+            <div class="wrong-q">
+              <span class="wrong-score">{{ w.score }}分</span>
+              {{ w.stem }}
+            </div>
+            <div v-if="w.type === 'single'" class="wrong-opts">
+              <div v-for="opt in parseOptions(w.options)" :key="opt" :class="{ right: opt.charAt(0) === w.answer }">
+                {{ opt }} {{ opt.charAt(0) === w.answer ? '✓' : '' }}
+              </div>
+              <div class="your-answer">你的答案：{{ w.user_answer?.replace(/"/g, '') || '（未作答）' }}</div>
+            </div>
+            <div v-else class="wrong-ans">
+              <div class="label">你的回答：</div>
+              <p>{{ w.user_answer?.replace(/"/g, '') || '（未作答）' }}</p>
+            </div>
+            <div class="wrong-exp">{{ w.explanation }}</div>
+          </el-card>
+        </div>
       </div>
     </div>
 
@@ -467,6 +532,15 @@ function onKeyEnter(event: KeyboardEvent) {
   flex-direction: column;
   min-height: 0;
 }
+.quiz-tabs {
+  padding: 0 0 10px;
+}
+.quiz-inner {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 .quiz-scope {
   display: flex;
   gap: 10px;
@@ -518,6 +592,63 @@ function onKeyEnter(event: KeyboardEvent) {
   font-size: 14px;
   font-weight: 600;
   color: var(--ws-blue);
+}
+.wrong-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 14px 14px;
+}
+.wrong-card {
+  margin-bottom: 10px;
+  border-left: 3px solid #e67e7e;
+}
+.wrong-q {
+  font-weight: 600;
+  line-height: 1.6;
+  margin-bottom: 8px;
+}
+.wrong-score {
+  display: inline-block;
+  background: #fceaea;
+  color: #c74b4b;
+  border-radius: 4px;
+  padding: 1px 8px;
+  font-size: 12px;
+  margin-right: 6px;
+  font-weight: 400;
+}
+.wrong-opts > div {
+  padding: 3px 0;
+  font-size: 13px;
+}
+.wrong-opts .right {
+  color: var(--ws-green);
+  font-weight: 600;
+}
+.your-answer {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #c74b4b;
+}
+.wrong-ans .label {
+  font-size: 12px;
+  color: var(--ws-ink-light);
+  margin-bottom: 4px;
+}
+.wrong-ans p {
+  font-size: 13px;
+  line-height: 1.7;
+  margin: 0 0 6px;
+  color: #7a756a;
+}
+.wrong-exp {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ws-ink);
+  background: var(--ws-bg);
+  border-radius: 6px;
+  padding: 8px 10px;
 }
 .locate-wrap {
   flex: 1;

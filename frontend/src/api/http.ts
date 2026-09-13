@@ -176,6 +176,34 @@ export const quizApi = {
       .then((r) => r.data),
   grade: (kbId: number, questions: QuizQuestion[], userAnswers: string[]) =>
     http.post<GradeItem[]>(`/kb/${kbId}/quiz/grade`, { questions, userAnswers }).then((r) => r.data),
+  saveAttempt: (kbId: number, questions: QuizQuestion[], answers: string[], grades: GradeItem[]) =>
+    http
+      .post<{ saved: boolean; totalScore: number }>(`/kb/${kbId}/quiz/attempts`, { questions, answers, grades })
+      .then((r) => r.data),
+  attempts: (kbId: number) =>
+    http
+      .get<{ id: number; total_score: number; created_at: string; question_count: number; wrong_count: number }[]>(
+        `/kb/${kbId}/quiz/attempts`,
+      )
+      .then((r) => r.data),
+  wrong: (kbId: number) =>
+    http
+      .get<
+        {
+          attempt_id: number
+          created_at: string
+          type: string
+          stem: string
+          options: string
+          answer: string
+          explanation: string
+          score: string
+          comment: string
+          missed_sentences: string
+          user_answer: string
+        }[]
+      >(`/kb/${kbId}/quiz/wrong`)
+      .then((r) => r.data),
 }
 
 // ---------- 评测集标注（D17） ----------

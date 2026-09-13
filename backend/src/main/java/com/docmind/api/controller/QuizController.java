@@ -7,10 +7,12 @@ import com.docmind.quiz.QuizService;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -21,9 +23,41 @@ import java.util.Map;
 public class QuizController {
 
     private final QuizService quizService;
+    private final com.docmind.quiz.QuizAttemptService attemptService;
 
-    public QuizController(QuizService quizService) {
+    public QuizController(QuizService quizService, com.docmind.quiz.QuizAttemptService attemptService) {
         this.quizService = quizService;
+        this.attemptService = attemptService;
+    }
+
+    /** 判分后保存练习记录（错题本数据源） */
+    @SuppressWarnings("unchecked")
+    @PostMapping("/api/kb/{kbId}/quiz/attempts")
+    public Map<String, Object> saveAttempt(@PathVariable Long kbId,
+                                           @RequestHeader("X-Visitor-Id")
+                                           @NotBlank(message = "缺少访客标识")
+                                           @Size(max = 64) String visitorId,
+                                           @RequestBody Map<String, Object> body) {
+        return attemptService.save(kbId, visitorId, body);
+    }
+
+    /** 历史练习列表 */
+    @GetMapping("/api/kb/{kbId}/quiz/attempts")
+    public List<Map<String, Object>> listAttempts(@PathVariable Long kbId,
+                                                  @RequestHeader("X-Visitor-Id")
+                                                  @NotBlank(message = "缺少访客标识")
+                                                  @Size(max = 64) String visitorId,
+                                                  @RequestParam(defaultValue = "10") int limit) {
+        return attemptService.list(kbId, visitorId, Math.min(limit, 20));
+    }
+
+    /** 错题本：跨所有练习的错题 */
+    @GetMapping("/api/kb/{kbId}/quiz/wrong")
+    public List<Map<String, Object>> wrongQuestions(@PathVariable Long kbId,
+                                                    @RequestHeader("X-Visitor-Id")
+                                                    @NotBlank(message = "缺少访客标识")
+                                                    @Size(max = 64) String visitorId) {
+        return attemptService.wrongQuestions(kbId, visitorId);
     }
 
     /** 出题：范围可选（documentId / sectionPrefix，都空=整个库），生成 5 题（3 单选 + 2 简答） */
