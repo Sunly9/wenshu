@@ -4,19 +4,11 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ChatDotRound, Key, Plus, Search } from '@element-plus/icons-vue'
 import { errMsg, kbApi } from '../api/http'
-import { isDevMode, toggleDevMode } from '../api/visitor'
 import type { KbInfo } from '../api/types'
 
 const router = useRouter()
 const kbs = ref<KbInfo[]>([])
 const loading = ref(false)
-const devMode = ref(isDevMode())
-
-function switchDevMode() {
-  const next = toggleDevMode()
-  devMode.value = next
-  ElMessage.success(next ? '已开启开发者视图（调试台/分片预览已显示）' : '已回到普通用户视图')
-}
 
 const createDialog = ref(false)
 const createForm = reactive({ name: '', description: '' })
@@ -113,15 +105,10 @@ onMounted(load)
               开始提问
             </el-button>
             <el-button text :icon="Search" @click.stop="router.push(`/chat/${kb.id}`)">查原文</el-button>
-            <el-button v-if="devMode" text size="small" @click.stop="router.push(`/debug/${kb.id}`)">调试台</el-button>
           </div>
         </el-card>
       </el-col>
     </el-row>
-
-    <div class="dev-footer">
-      <a @click="switchDevMode">{{ devMode ? '开发者视图已开启 · 切回普通视图' : '开发者工具' }}</a>
-    </div>
 
     <el-dialog v-model="createDialog" title="新建资料库" width="440px">
       <el-form label-width="60px">
@@ -255,18 +242,5 @@ onMounted(load)
   margin-top: 10px;
   font-size: 12px;
   color: var(--ws-ink-light);
-}
-.dev-footer {
-  text-align: center;
-  margin-top: 26px;
-}
-.dev-footer a {
-  font-size: 11px;
-  color: #c6c0b2;
-  cursor: pointer;
-  letter-spacing: 1px;
-}
-.dev-footer a:hover {
-  color: var(--ws-purple);
 }
 </style>
