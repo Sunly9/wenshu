@@ -9,9 +9,10 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.springframework.http.MediaType;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -20,9 +21,21 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 public class ChatController {
 
     private final ChatService chatService;
+    private final com.docmind.service.StudyPlanService studyPlanService;
 
-    public ChatController(ChatService chatService) {
+    public ChatController(ChatService chatService,
+                          com.docmind.service.StudyPlanService studyPlanService) {
         this.chatService = chatService;
+        this.studyPlanService = studyPlanService;
+    }
+
+    /** 学习计划：AI 读完全部资料后生成复习建议 */
+    @PostMapping("/api/kb/{kbId}/study-plan")
+    public String studyPlan(@PathVariable Long kbId,
+                            @RequestHeader("X-Visitor-Id")
+                            @NotBlank(message = "缺少访客标识")
+                            @Size(max = 64) String visitorId) {
+        return studyPlanService.generate(kbId, visitorId);
     }
 
     /** 提问，SSE 流式返回：citation → token* → done（00 号文档 §7） */

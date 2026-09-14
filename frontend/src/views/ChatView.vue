@@ -3,7 +3,7 @@ import { computed, nextTick, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { chatStream } from '../api/sse'
-import { errMsg, kbApi, locateApi, quizApi, suggestApi, shortSection } from '../api/http'
+import { errMsg, kbApi, locateApi, quizApi, suggestApi, shortSection, chatApi } from '../api/http'
 import { isDevMode } from '../api/visitor'
 import SourceViewDialog from '../components/SourceViewDialog.vue'
 import type { DocStatus, GradeItem, LocateItem, QuizQuestion } from '../api/http'
@@ -51,6 +51,37 @@ const question = ref('')
 const streaming = ref(false)
 const listEl = ref<HTMLElement>()
 const dialogSnippet = ref<Citation | null>(null)
+
+// 学习模式开关（严格=只从资料回答 / 学习=从资料出发深入讲解）
+const chatMode = ref<'strict' | 'learn'>('strict')
+
+// 学习计划
+interface StudyPlanData {
+  overview?: string
+  chapters?: Array<{ title: string; priority: string; focus: string; estimated_minutes: number }>
+  tips?: string[]
+}
+const studyPlan = ref<StudyPlanData | string | null>(null)
+const planLoading = ref(false)
+
+async function generateStudyPlan() {
+  if (planLoading.value) return
+  planLoading.value = true
+  try {
+    const raw = await chatApi.studyPlan(kbId)
+    // 后端返回 JSON 字符串，解析为可显示的结构
+    try {
+      const plan = JSON.parse(raw)
+      studyPlan.value = plan
+    } catch {
+      studyPlan.value = raw
+    }
+  } catch (e) {
+    ElMessage.error(errMsg(e))
+  } finally {
+    planLoading.value = false
+  }
+}
 
 // 查模式（原文定位）
 const mode = ref<'ask' | 'locate' | 'quiz'>('ask')
@@ -209,6 +240,15 @@ async function send() {
   streaming.value = true
   await scrollBottom()
 
+  // 构建对话历史（最近3轮，支持追问）
+  const history = messages
+    .filter((m) => m.role === 'user' || (m.role === 'assistant' && m.done && m.text))
+    .slice(-6)
+    .map((m) => ({
+      role: m.role === 'user' ? 'user' : 'assistant',
+      content: m.role === 'user' ? m.text : m.text.slice(0, 200),
+    }))
+
   await chatStream(kbId, q, {
     onCitation: (cs) => {
       assistant.citations = cs
@@ -221,7 +261,7 @@ async function send() {
       assistant.meta = meta
       assistant.done = true
     },
-  }).catch(() => {
+  }, chatMode.value, history).catch(() => {
     assistant.meta = { error: '连接中断（后端可能已重启），请刷新后重试' }
     assistant.done = true
   })
@@ -389,13 +429,48 @@ function onKeyEnter(event: KeyboardEvent) {
       <div v-if="messages.length === 0" class="welcome">
         <div class="welcome-title">问点什么吧 📖</div>
         <div class="welcome-sub">答案只来自你上传的资料，每句话都标出处；资料里没有的会直说"没找到依据"</div>
+        <div class="mode-switch">
+          <el-radio-group v-model="chatMode" size="small">
+            <el-radio-button value="strict">严格模式 · 只答资料内容</el-radio-button>
+            <el-radio-button value="learn">学习模式 · 从资料延伸讲解</el-radio-button>
+          </el-radio-group>
+        </div>
         <div v-if="suggestLoading" class="chips"><span class="chip loading">正在根据你的资料想几个问题…</span></div>
         <div v-else-if="suggestions.length" class="chips">
           <span v-for="(q, i) in suggestions" :key="i" class="chip" :class="'c' + ((i % 4) + 1)" @click="fillExample(q)">
             {{ q }}
           </span>
         </div>
+        <div class="plan-area">
+          <el-button size="small" type="warning" plain :loading="planLoading" @click="generateStudyPlan">
+            📋 生成学习计划
+          </el-button>
+        </div>
       </div>
+      <!-- 学习计划展示 -->
+      <div v-if="studyPlan" class="study-plan">
+        <el-card shadow="never">
+          <template #header>
+            <span class="dot" style="background: var(--ws-orange)" />
+            学习计划
+            <el-button text size="small" style="float:right" @click="studyPlan = null">收起</el-button>
+          </template>
+          <template v-if="typeof studyPlan === 'object' && studyPlan !== null && studyPlan.overview">
+            <p class="plan-overview">{{ studyPlan.overview }}</p>
+            <div v-for="(ch, i) in studyPlan.chapters" :key="i" class="plan-chapter">
+              <span class="plan-priority" :class="'p-' + ch.priority">{{ ch.priority }}</span>
+              <b>{{ ch.title }}</b>
+              <span class="plan-focus">{{ ch.focus }}</span>
+              <span class="plan-time">约 {{ ch.estimated_minutes }} 分钟</span>
+            </div>
+            <div v-if="studyPlan.tips?.length" class="plan-tips">
+              <div v-for="(tip, i) in studyPlan.tips" :key="i">💡 {{ tip }}</div>
+            </div>
+          </template>
+          <pre v-else class="plan-raw">{{ studyPlan }}</pre>
+        </el-card>
+      </div>
+
       <div v-for="(m, i) in messages" :key="i" class="msg" :class="m.role">
         <div class="bubble">
           <template v-if="m.role === 'user'">{{ m.text }}</template>
@@ -489,7 +564,61 @@ function onKeyEnter(event: KeyboardEvent) {
 .welcome-sub {
   font-size: 13px;
   color: var(--ws-ink-light);
-  margin-bottom: 18px;
+  margin-bottom: 14px;
+}
+.mode-switch {
+  margin-bottom: 14px;
+}
+.plan-area {
+  margin-top: 16px;
+}
+.study-plan {
+  padding: 0 14px 10px;
+}
+.plan-overview {
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--ws-ink);
+  margin-bottom: 12px;
+}
+.plan-chapter {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--ws-border);
+  font-size: 13px;
+}
+.plan-priority {
+  display: inline-block;
+  width: 28px;
+  text-align: center;
+  border-radius: 4px;
+  font-size: 11px;
+  padding: 1px 0;
+}
+.plan-priority.p-高 { background: #fce4ec; color: #c62828; }
+.plan-priority.p-中 { background: #fff3e0; color: #ef6c00; }
+.plan-priority.p-低 { background: #e8f5e9; color: #2e7d32; }
+.plan-focus {
+  color: var(--ws-ink-light);
+  flex: 1;
+}
+.plan-time {
+  color: var(--ws-ink-light);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.plan-tips {
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 2;
+  color: var(--ws-ink);
+}
+.plan-raw {
+  font-size: 13px;
+  line-height: 1.8;
+  white-space: pre-wrap;
 }
 .chips {
   display: flex;

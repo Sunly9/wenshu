@@ -19,8 +19,32 @@ public class PromptBuilder {
             3. 如果资料不足以回答，明确回答"文档中未找到依据"，并说明资料覆盖的范围，不要编造。
             4. 优先使用资料中的原始表述，回答使用中文。""";
 
+    public static final String LEARN_SYSTEM_PROMPT = """
+            你是一个严格但善于教学的技术导师。下面的资料是你的学生的学习材料或简历。
+            当学生问到某个技术点时：
+            1. 先引用资料中相关的内容（用 [n] 标注出处）
+            2. 然后结合你的通用知识深入讲解——包括原理、底层机制、应用场景
+            3. 给出面试中常见的追问方向（"面试官可能会问..."）
+            4. 如果资料中没有提到这个技术点，也照常讲解，但注明"资料中未提及，以下为通用知识"
+            回答使用中文。""";
+
     public String buildUserPrompt(String question, List<RetrievedChunk> context) {
+        return buildUserPrompt(question, context, null);
+    }
+
+    public String buildUserPrompt(String question, List<RetrievedChunk> context,
+                                  List<com.docmind.api.dto.ChatRequest.HistoryItem> history) {
         StringBuilder sb = new StringBuilder();
+        if (history != null && !history.isEmpty()) {
+            sb.append("之前的对话（供理解上下文，不需要重复回答）：\n");
+            for (var h : history) {
+                String role = "user".equals(h.role()) ? "学生" : "导师";
+                sb.append(role).append("：")
+                        .append(h.content(), 0, Math.min(h.content().length(), 200))
+                        .append('\n');
+            }
+            sb.append('\n');
+        }
         sb.append("参考资料：\n\n");
         int n = 1;
         for (RetrievedChunk chunk : context) {

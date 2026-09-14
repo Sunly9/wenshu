@@ -132,6 +132,11 @@ export interface LocateItem {
   score?: number
 }
 
+export const chatApi = {
+  studyPlan: (kbId: number) =>
+    http.post<string>(`/kb/${kbId}/study-plan`).then((r) => r.data),
+}
+
 export const locateApi = {
   query: (kbId: number, query: string) =>
     http.post<LocateItem[]>(`/kb/${kbId}/locate`, { query }).then((r) => r.data),

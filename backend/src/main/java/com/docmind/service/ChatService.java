@@ -115,9 +115,11 @@ public class ChatService {
         StringBuilder answer = new StringBuilder();
         AtomicInteger promptTokens = new AtomicInteger();
         AtomicInteger completionTokens = new AtomicInteger();
-        String userPrompt = promptBuilder.buildUserPrompt(req.question(), contextBlocks);
+        boolean learnMode = "learn".equalsIgnoreCase(req.mode());
+        String systemPrompt = learnMode ? PromptBuilder.LEARN_SYSTEM_PROMPT : PromptBuilder.SYSTEM_PROMPT;
+        String userPrompt = promptBuilder.buildUserPrompt(req.question(), contextBlocks, req.history());
 
-        llmClient.stream(PromptBuilder.SYSTEM_PROMPT, userPrompt).subscribe(
+        llmClient.stream(systemPrompt, userPrompt).subscribe(
                 chunk -> {
                     if (!chunk.delta().isEmpty()) {
                         answer.append(chunk.delta());
