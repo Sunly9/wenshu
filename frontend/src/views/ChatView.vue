@@ -525,6 +525,9 @@ function onKeyEnter(event: KeyboardEvent) {
         </div>
       </div>
 
+      <!-- 右侧：消息区 + 输入框（垂直排列） -->
+      <div class="chat-content">
+
     <div ref="listEl" class="msg-list" @click="onCitationClick">
       <div v-if="messages.length === 0" class="welcome">
         <div class="welcome-title">问点什么吧 📖</div>
@@ -606,7 +609,9 @@ function onKeyEnter(event: KeyboardEvent) {
         发送
       </el-button>
     </div>
-    </div>
+
+      </div><!-- /chat-content -->
+    </div><!-- /chat-with-sidebar -->
     </template>
 
     <el-dialog v-model="dialogSnippet" :title="dialogSnippet ? `[${dialogSnippet.n}] 原文片段` : ''" width="560px">
@@ -642,6 +647,13 @@ function onKeyEnter(event: KeyboardEvent) {
   flex: 1;
   display: flex;
   min-height: 0;
+}
+.chat-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
 }
 .conv-sidebar {
   width: 180px;
