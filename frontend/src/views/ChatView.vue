@@ -500,8 +500,11 @@ function onKeyEnter(event: KeyboardEvent) {
     <div class="chat-with-sidebar">
       <!-- 对话列表侧边栏 -->
       <div v-if="showConversationList" class="conv-sidebar">
-        <el-button type="primary" size="small" style="width: 100%; margin-bottom: 10px" @click="newConversation">
+        <el-button type="primary" size="small" style="width: 100%; margin-bottom: 6px" @click="newConversation">
           + 新对话
+        </el-button>
+        <el-button size="small" style="width: 100%; margin-bottom: 6px; margin-left: 0" :loading="planLoading" @click="generateStudyPlan">
+          📋 学习计划
         </el-button>
         <div class="conv-list">
           <div
@@ -525,23 +528,12 @@ function onKeyEnter(event: KeyboardEvent) {
     <div ref="listEl" class="msg-list" @click="onCitationClick">
       <div v-if="messages.length === 0" class="welcome">
         <div class="welcome-title">问点什么吧 📖</div>
-        <div class="welcome-sub">答案只来自你上传的资料，每句话都标出处；资料里没有的会直说"没找到依据"</div>
-        <div class="mode-switch">
-          <el-radio-group v-model="chatMode" size="small">
-            <el-radio-button value="strict">严格模式 · 只答资料内容</el-radio-button>
-            <el-radio-button value="learn">学习模式 · 从资料延伸讲解</el-radio-button>
-          </el-radio-group>
-        </div>
+        <div class="welcome-sub">答案有出处，可以追问，可以说"继续"</div>
         <div v-if="suggestLoading" class="chips"><span class="chip loading">正在根据你的资料想几个问题…</span></div>
         <div v-else-if="suggestions.length" class="chips">
           <span v-for="(q, i) in suggestions" :key="i" class="chip" :class="'c' + ((i % 4) + 1)" @click="fillExample(q)">
             {{ q }}
           </span>
-        </div>
-        <div class="plan-area">
-          <el-button size="small" type="warning" plain :loading="planLoading" @click="generateStudyPlan">
-            📋 生成学习计划
-          </el-button>
         </div>
       </div>
       <!-- 学习计划展示 -->
@@ -652,33 +644,39 @@ function onKeyEnter(event: KeyboardEvent) {
   min-height: 0;
 }
 .conv-sidebar {
-  width: 200px;
+  width: 180px;
   border-right: 1px solid var(--ws-border);
-  padding: 10px;
+  padding: 8px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: #faf8f4;
+  border-radius: 0 0 0 10px;
 }
 .conv-list {
   flex: 1;
   overflow-y: auto;
+  margin-top: 4px;
 }
 .conv-item {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 8px 8px;
-  border-radius: 6px;
+  padding: 7px 8px;
+  border-radius: 8px;
   cursor: pointer;
   margin-bottom: 2px;
   font-size: 12px;
+  color: var(--ws-ink);
+  transition: background 0.15s;
 }
 .conv-item:hover {
-  background: var(--ws-blue-soft);
+  background: #edeae2;
 }
 .conv-item.active {
   background: var(--ws-blue-soft);
-  border-left: 3px solid var(--ws-blue);
+  color: var(--ws-blue);
+  font-weight: 600;
 }
 .conv-title {
   flex: 1;
@@ -704,24 +702,21 @@ function onKeyEnter(event: KeyboardEvent) {
 }
 .welcome {
   text-align: center;
-  padding: 44px 20px 20px;
+  padding: 40px 20px 20px;
+  max-width: 480px;
+  margin: 0 auto;
 }
 .welcome-title {
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 800;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 .welcome-sub {
   font-size: 13px;
   color: var(--ws-ink-light);
-  margin-bottom: 14px;
+  margin-bottom: 20px;
 }
-.mode-switch {
-  margin-bottom: 14px;
-}
-.plan-area {
-  margin-top: 16px;
-}
+/* 学习计划 */
 .study-plan {
   padding: 0 14px 10px;
 }
