@@ -41,10 +41,12 @@ public class ChatService {
     private final PromptBuilder promptBuilder;
     private final LlmClient llmClient;
     private final QueryLogService queryLogService;
+    private final ConversationService conversationService;
     private final com.docmind.common.ratelimit.RateLimiter rateLimiter;
 
     public ChatService(KbService kbService, RetrievalService retrievalService, ContextAssembler assembler,
                        PromptBuilder promptBuilder, LlmClient llmClient, QueryLogService queryLogService,
+                       ConversationService conversationService,
                        com.docmind.common.ratelimit.RateLimiter rateLimiter) {
         this.kbService = kbService;
         this.retrievalService = retrievalService;
@@ -52,6 +54,7 @@ public class ChatService {
         this.promptBuilder = promptBuilder;
         this.llmClient = llmClient;
         this.queryLogService = queryLogService;
+        this.conversationService = conversationService;
         this.rateLimiter = rateLimiter;
     }
 
@@ -142,6 +145,23 @@ public class ChatService {
                             answer.toString(), latency,
                             promptTokens.get(), completionTokens.get(),
                             retrievalService.meta(retrieval));
+
+                    // 保存到对话（刷新不丢）
+                    if (req.conversationId() != null) {
+                        try {
+                            conversationService.saveMessage(req.conversationId(), "user", req.question(), null);
+                            String citationsJson = new com.fasterxml.jackson.databind.ObjectMapper()
+                                    .writeValueAsString(citations);
+                            conversationService.saveMessage(req.conversationId(), "assistant",
+                                    answer.toString(), citationsJson);
+                            if (conversationService.isFirstMessage(req.conversationId())) {
+                                conversationService.generateTitle(req.conversationId(), req.question());
+                            }
+                        } catch (Exception e) {
+                            log.warn("对话保存失败: {}", e.getMessage());
+                        }
+                    }
+
                     safeSend.accept("done", Map.of(
                             "queryId", queryId, "latencyMs", latency,
                             "promptTokens", promptTokens.get(), "completionTokens", completionTokens.get()));

@@ -9,8 +9,9 @@ public record ChatRequest(
         @NotNull(message = "缺少资料库 id") Long kbId,
         @NotBlank(message = "问题不能为空")
         @Size(max = 500, message = "问题最长 500 字符") String question,
-        String mode,          // strict(默认) / learn
-        List<HistoryItem> history  // 最近几轮对话，支持追问
+        String mode,
+        Long conversationId,          // 当前对话 id（null = 前端未创建对话）
+        List<HistoryItem> history
 ) {
     public record HistoryItem(String role, String content) {}
 }

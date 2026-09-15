@@ -60,6 +60,19 @@ public class QuizController {
         return attemptService.wrongQuestions(kbId, visitorId);
     }
 
+    /** 删除已掌握的错题：重建 grades JSON 去掉指定题 */
+    @PostMapping("/api/kb/{kbId}/quiz/wrong/delete")
+    public Map<String, Object> deleteWrong(@PathVariable Long kbId,
+                                           @RequestHeader("X-Visitor-Id")
+                                           @NotBlank(message = "缺少访客标识")
+                                           @Size(max = 64) String visitorId,
+                                           @RequestBody Map<String, Object> body) {
+        attemptService.deleteWrong(kbId, visitorId,
+                Long.parseLong(String.valueOf(body.get("attemptId"))),
+                Integer.parseInt(String.valueOf(body.get("questionIndex"))));
+        return Map.of("deleted", true);
+    }
+
     /** 出题：范围可选（documentId / sectionPrefix，都空=整个库），生成 5 题（3 单选 + 2 简答） */
     @PostMapping("/api/kb/{kbId}/quiz/generate")
     public List<QuizQuestion> generate(@PathVariable Long kbId,

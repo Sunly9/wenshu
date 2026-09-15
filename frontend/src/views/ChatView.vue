@@ -3,7 +3,9 @@ import { computed, nextTick, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { chatStream } from '../api/sse'
-import { errMsg, kbApi, locateApi, quizApi, suggestApi, shortSection, chatApi } from '../api/http'
+import { errMsg, kbApi, locateApi, quizApi, suggestApi, shortSection, chatApi,
+         conversationApi, wrongApi } from '../api/http'
+import type { Conversation } from '../api/http'
 import { isDevMode } from '../api/visitor'
 import SourceViewDialog from '../components/SourceViewDialog.vue'
 import type { DocStatus, GradeItem, LocateItem, QuizQuestion } from '../api/http'
@@ -54,6 +56,61 @@ const dialogSnippet = ref<Citation | null>(null)
 
 // 学习模式开关（严格=只从资料回答 / 学习=从资料出发深入讲解）
 const chatMode = ref<'strict' | 'learn'>('strict')
+
+// ---------- 对话管理（历史对话保存/切换） ----------
+const conversations = ref<Conversation[]>([])
+const currentConversationId = ref<number | null>(null)
+const showConversationList = ref(true)
+
+async function loadConversations() {
+  try {
+    conversations.value = await conversationApi.list(kbId)
+  } catch { /* 静默 */ }
+}
+
+async function newConversation() {
+  const conv = await conversationApi.create(kbId)
+  currentConversationId.value = conv.id
+  messages.length = 0  // 清空当前消息
+  await loadConversations()
+}
+
+async function switchConversation(id: number) {
+  if (id === currentConversationId.value) return
+  currentConversationId.value = id
+  messages.length = 0
+  const msgs = await conversationApi.messages(id)
+  for (const m of msgs) {
+    if (m.role === 'user') {
+      messages.push({ role: 'user', text: m.content })
+    } else {
+      let citations: Citation[] = []
+      try { citations = m.citations ? JSON.parse(m.citations) : [] } catch { /* ignore */ }
+      messages.push({ role: 'assistant', text: m.content, citations, meta: null, done: true })
+    }
+  }
+  await scrollBottom()
+}
+
+async function deleteConversation(id: number) {
+  await conversationApi.delete(id)
+  if (currentConversationId.value === id) {
+    currentConversationId.value = null
+    messages.length = 0
+  }
+  await loadConversations()
+}
+
+// ---------- 错题删除 ----------
+async function deleteWrong(attemptId: number, questionIndex: number) {
+  try {
+    await wrongApi.delete(kbId, attemptId, questionIndex)
+    ElMessage.success('已标记为掌握')
+    await loadWrong()
+  } catch (e) {
+    ElMessage.error(errMsg(e))
+  }
+}
 
 // 学习计划
 interface StudyPlanData {
@@ -249,6 +306,15 @@ async function send() {
       content: m.role === 'user' ? m.text : m.text.slice(0, 200),
     }))
 
+  // 如果没有当前对话，自动创建一个
+  if (!currentConversationId.value) {
+    try {
+      const conv = await conversationApi.create(kbId)
+      currentConversationId.value = conv.id
+      loadConversations() // 后台刷新列表
+    } catch { /* 对话创建失败不阻塞提问 */ }
+  }
+
   await chatStream(kbId, q, {
     onCitation: (cs) => {
       assistant.citations = cs
@@ -260,8 +326,9 @@ async function send() {
     onDone: (meta) => {
       assistant.meta = meta
       assistant.done = true
+      loadConversations() // 刷新对话列表（标题可能更新了）
     },
-  }, chatMode.value, history).catch(() => {
+  }, chatMode.value, history, currentConversationId.value || undefined).catch(() => {
     assistant.meta = { error: '连接中断（后端可能已重启），请刷新后重试' }
     assistant.done = true
   })
@@ -382,6 +449,11 @@ function onKeyEnter(event: KeyboardEvent) {
               <p>{{ w.user_answer?.replace(/"/g, '') || '（未作答）' }}</p>
             </div>
             <div class="wrong-exp">{{ w.explanation }}</div>
+            <div class="wrong-actions">
+              <el-button size="small" type="success" plain @click="deleteWrong(w.attempt_id, i)">
+                ✓ 已掌握
+              </el-button>
+            </div>
           </el-card>
         </div>
       </div>
@@ -423,8 +495,33 @@ function onKeyEnter(event: KeyboardEvent) {
       </div>
     </div>
 
-    <!-- 问模式：对话 -->
+    <!-- 问模式：对话 + 侧边栏 -->
     <template v-else>
+    <div class="chat-with-sidebar">
+      <!-- 对话列表侧边栏 -->
+      <div v-if="showConversationList" class="conv-sidebar">
+        <el-button type="primary" size="small" style="width: 100%; margin-bottom: 10px" @click="newConversation">
+          + 新对话
+        </el-button>
+        <div class="conv-list">
+          <div
+            v-for="conv in conversations"
+            :key="conv.id"
+            class="conv-item"
+            :class="{ active: conv.id === currentConversationId }"
+            @click="switchConversation(conv.id)"
+          >
+            <span class="conv-title">{{ conv.title || '新对话' }}</span>
+            <span class="conv-meta">{{ conv.msg_count }} 条</span>
+            <el-button
+              text size="small" type="danger"
+              class="conv-delete"
+              @click.stop="deleteConversation(conv.id)"
+            >×</el-button>
+          </div>
+        </div>
+      </div>
+
     <div ref="listEl" class="msg-list" @click="onCitationClick">
       <div v-if="messages.length === 0" class="welcome">
         <div class="welcome-title">问点什么吧 📖</div>
@@ -517,6 +614,7 @@ function onKeyEnter(event: KeyboardEvent) {
         发送
       </el-button>
     </div>
+    </div>
     </template>
 
     <el-dialog v-model="dialogSnippet" :title="dialogSnippet ? `[${dialogSnippet.n}] 原文片段` : ''" width="560px">
@@ -547,6 +645,58 @@ function onKeyEnter(event: KeyboardEvent) {
   padding: 10px 12px 6px;
   background: linear-gradient(115deg, var(--ws-blue-soft), var(--ws-green-soft) 60%, var(--ws-orange-soft));
   border-radius: 10px 10px 0 0;
+}
+.chat-with-sidebar {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+.conv-sidebar {
+  width: 200px;
+  border-right: 1px solid var(--ws-border);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.conv-list {
+  flex: 1;
+  overflow-y: auto;
+}
+.conv-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-bottom: 2px;
+  font-size: 12px;
+}
+.conv-item:hover {
+  background: var(--ws-blue-soft);
+}
+.conv-item.active {
+  background: var(--ws-blue-soft);
+  border-left: 3px solid var(--ws-blue);
+}
+.conv-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.conv-meta {
+  color: var(--ws-ink-light);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.conv-delete {
+  opacity: 0;
+  padding: 0 2px;
+}
+.conv-item:hover .conv-delete {
+  opacity: 1;
 }
 .mode-bar :deep(.el-radio-button__inner) {
   border: none;
@@ -778,6 +928,10 @@ function onKeyEnter(event: KeyboardEvent) {
   background: var(--ws-bg);
   border-radius: 6px;
   padding: 8px 10px;
+}
+.wrong-actions {
+  margin-top: 8px;
+  text-align: right;
 }
 .locate-wrap {
   flex: 1;

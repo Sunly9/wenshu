@@ -9,11 +9,17 @@ export interface ChatHandlers {
 
 /** POST /api/chat 的 SSE 流解析（fetch + ReadableStream，因为 EventSource 只支持 GET） */
 export async function chatStream(kbId: number, question: string, handlers: ChatHandlers,
-                                mode?: string, history?: Array<{ role: string; content: string }>): Promise<void> {
+                                mode?: string, history?: Array<{ role: string; content: string }>,
+                                conversationId?: number): Promise<void> {
   const res = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Visitor-Id': getVisitorId() },
-    body: JSON.stringify({ kbId, question, mode: mode || 'strict', history: history || [] }),
+    body: JSON.stringify({
+      kbId, question,
+      mode: mode || 'strict',
+      history: history || [],
+      conversationId: conversationId || null,
+    }),
   })
   if (!res.ok || !res.body) {
     let message = `请求失败（${res.status}）`

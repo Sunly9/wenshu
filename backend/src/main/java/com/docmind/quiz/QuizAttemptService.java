@@ -89,6 +89,30 @@ public class QuizAttemptService {
                 """, kbId, visitorId);
     }
 
+    /** 删除已掌握的错题：将该题的 score 改为 100（不再出现在错题本） */
+    public void deleteWrong(long kbId, String visitorId, long attemptId, int questionIndex) {
+        kbService.requireAccessible(kbId, visitorId);
+        // 取出 grades JSON，把指定索引的 score 设为 100，写回
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "SELECT grades FROM quiz_attempt WHERE id = ? AND kb_id = ? AND visitor_id = ?",
+                attemptId, kbId, visitorId);
+        if (rows.isEmpty()) {
+            throw new com.docmind.common.exception.NotFoundException("练习记录不存在");
+        }
+        try {
+            com.fasterxml.jackson.databind.JsonNode grades = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .readTree(rows.get(0).get("grades").toString());
+            if (questionIndex >= 0 && questionIndex < grades.size()) {
+                ((com.fasterxml.jackson.databind.node.ObjectNode) grades.get(questionIndex))
+                        .put("score", 100);
+            }
+            jdbc.update("UPDATE quiz_attempt SET grades = ?::jsonb WHERE id = ?",
+                    grades.toString(), attemptId);
+        } catch (Exception e) {
+            throw new com.docmind.common.exception.ApiException("删除错题失败：" + e.getMessage());
+        }
+    }
+
     /** 单次练习详情 */
     public Map<String, Object> detail(long kbId, long attemptId, String visitorId) {
         kbService.requireAccessible(kbId, visitorId);

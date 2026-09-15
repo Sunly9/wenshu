@@ -137,6 +137,39 @@ export const chatApi = {
     http.post<string>(`/kb/${kbId}/study-plan`).then((r) => r.data),
 }
 
+// ---------- 对话管理 ----------
+export interface Conversation {
+  id: number
+  title: string
+  updated_at: string
+  msg_count: number
+}
+
+export interface ConversationMessage {
+  role: 'user' | 'assistant'
+  content: string
+  citations: string | null
+}
+
+export const conversationApi = {
+  create: (kbId: number) =>
+    http.post<{ id: number; title: string }>(`/kb/${kbId}/conversations`).then((r) => r.data),
+  list: (kbId: number) =>
+    http.get<Conversation[]>(`/kb/${kbId}/conversations`).then((r) => r.data),
+  messages: (conversationId: number) =>
+    http.get<ConversationMessage[]>(`/conversations/${conversationId}/messages`).then((r) => r.data),
+  delete: (conversationId: number) =>
+    http.delete<{ deleted: boolean }>(`/conversations/${conversationId}`).then((r) => r.data),
+}
+
+// ---------- 错题删除 ----------
+export const wrongApi = {
+  delete: (kbId: number, attemptId: number, questionIndex: number) =>
+    http
+      .post<{ deleted: boolean }>(`/kb/${kbId}/quiz/wrong/delete`, { attemptId, questionIndex })
+      .then((r) => r.data),
+}
+
 export const locateApi = {
   query: (kbId: number, query: string) =>
     http.post<LocateItem[]>(`/kb/${kbId}/locate`, { query }).then((r) => r.data),
